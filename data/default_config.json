@@ -1,31 +1,107 @@
 {
-    "capacity_per_day": 10,
-    "warehouse_capacity": 500,
-    "models": {
-        "P3D-Classic": {
-            "assembly_time_hours": 4,
-            "bom": {
-                "kit_piezas": 1,
-                "pcb": 1,
-                "pcb_ref": "CTRL-V2",
-                "extrusor": 1,
-                "cables_conexion": 2,
-                "transformador_24v": 1,
-                "enchufe_schuko": 1
-            }
-        },
-        "D-Pro": {
-            "assembly_time_hours": 6,
-            "bom": {
-                "kit_piezas": 1,
-                "pcb": 1,
-                "pcb_ref": "CTRL-V3",
-                "extrusor": 1,
-                "sensor_autonivel": 1,
-                "cables_conexion": 3,
-                "transformador_24v": 1,
-                "enchufe_schuko": 1
-            }
-        }
+  "capacity_per_day": 10,
+  "warehouse_capacity": 500,
+  "demand_distribution": "normal",
+  "default_mean": 5,
+  "default_variance": 2.0,
+  "random_seed": null,
+  "models": {
+    "P3D-Classic": {
+      "assembly_time_hours": 4,
+      "bom": {
+        "kit_piezas": 1,
+        "pcb": 1,
+        "pcb_ref": "CTRL-V2",
+        "extrusor": 1,
+        "cables_conexion": 2,
+        "transformador_24v": 1,
+        "enchufe_schuko": 1
+      },
+      "demand_mean": 6,
+      "demand_variance": 2.5
+    },
+    "P3D-Pro": {
+      "assembly_time_hours": 6,
+      "bom": {
+        "kit_piezas": 1,
+        "pcb": 1,
+        "pcb_ref": "CTRL-V3",
+        "extrusor": 1,
+        "sensor_autonivel": 1,
+        "cables_conexion": 3,
+        "transformador_24v": 1,
+        "enchufe_schuko": 1
+      },
+      "demand_mean": 3,
+      "demand_variance": 1.5
     }
+  },
+  "suppliers": [
+    {
+      "id": 1,
+      "name": "Componentes ABC",
+      "products": [
+        {
+          "product": "kit_piezas",
+          "price_per_unit": 90.00,
+          "lead_time_days": 3,
+          "min_order_qty": 1
+        },
+        {
+          "product": "pcb",
+          "price_per_unit": 25.00,
+          "lead_time_days": 5,
+          "min_order_qty": 1
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "EuroComponents Ltd",
+      "products": [
+        {
+          "product": "kit_piezas",
+          "price_per_unit": 85.00,
+          "lead_time_days": 7,
+          "min_order_qty": 5
+        },
+        {
+          "product": "extrusor",
+          "price_per_unit": 35.00,
+          "lead_time_days": 4,
+          "min_order_qty": 5
+        },
+        {
+          "product": "pcb_ref",
+          "price_per_unit": 10.00,
+          "lead_time_days": 3,
+          "min_order_qty": 10
+        },
+        {
+          "product": "sensor_autonivel",
+          "price_per_unit": 15.00,
+          "lead_time_days": 2,
+          "min_order_qty": 10
+        },
+        {
+          "product": "cables_conexion",
+          "price_per_unit": 2.00,
+          "lead_time_days": 1,
+          "min_order_qty": 50
+        },
+        {
+          "product": "transformador_24v",
+          "price_per_unit": 18.00,
+          "lead_time_days": 3,
+          "min_order_qty": 5
+        },
+        {
+          "product": "enchufe_schuko",
+          "price_per_unit": 3.50,
+          "lead_time_days": 2,
+          "min_order_qty": 20
+        }
+      ]
+    }
+  ]
 }

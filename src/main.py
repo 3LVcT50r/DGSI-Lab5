@@ -27,6 +27,13 @@ app.include_router(api_router, prefix="/api/v1")
 @app.on_event("startup")
 def startup_event():
     models.Base.metadata.create_all(bind=engine)
+    
+    # Try to seed database from config file:
+    from src.services.seed import seed_database_from_config
+    from src.database import SessionLocal
+    
+    with SessionLocal() as session:
+        seed_database_from_config(session, str(settings.default_config_path))
 
 
 @app.get("/health")
