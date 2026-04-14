@@ -1,0 +1,31 @@
+{
+    "capacity_per_day": 10,
+    "warehouse_capacity": 500,
+    "models": {
+        "P3D-Classic": {
+            "assembly_time_hours": 4,
+            "bom": {
+                "kit_piezas": 1,
+                "pcb": 1,
+                "pcb_ref": "CTRL-V2",
+                "extrusor": 1,
+                "cables_conexion": 2,
+                "transformador_24v": 1,
+                "enchufe_schuko": 1
+            }
+        },
+        "D-Pro": {
+            "assembly_time_hours": 6,
+            "bom": {
+                "kit_piezas": 1,
+                "pcb": 1,
+                "pcb_ref": "CTRL-V3",
+                "extrusor": 1,
+                "sensor_autonivel": 1,
+                "cables_conexion": 3,
+                "transformador_24v": 1,
+                "enchufe_schuko": 1
+            }
+        }
+    }
+}
