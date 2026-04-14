@@ -11,6 +11,7 @@ from src.schemas import (
     SupplierRead,
     BOMRead,
     EventRead,
+    ProductRead,
 )
 from src.models import (
     ManufacturingOrder,
@@ -19,6 +20,7 @@ from src.models import (
     Supplier,
     BOM,
     Event,
+    Product,
 )
 from src.services.simulation import (
     advance_day,
@@ -196,3 +198,12 @@ def post_import_state(file: UploadFile = File(...), db: Session = Depends(get_db
         return {"status": "imported"}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+# ---------------------------------------------------------------------------
+# Products
+# ---------------------------------------------------------------------------
+
+@api_router.get("/products", response_model=List[ProductRead])
+def get_products(db: Session = Depends(get_db_session)):
+    """List all products."""
+    return db.query(Product).all()

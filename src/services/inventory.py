@@ -1,6 +1,6 @@
 import logging
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Tuple
 
 from src.models import Inventory, BOM, Product
 from src.schemas import InventoryRead
@@ -18,17 +18,16 @@ def get_inventory_levels(session: Session) -> List[InventoryRead]:
     ]
 
 
-def reserve_materials(session: Session, product_id: int, quantity: int) -> bool:
+def reserve_materials(session: Session, product_id: int, quantity: int) -> Tuple[bool, List[str]]:
     """
     Reserve raw materials required to start a manufacturing order.
-    Returns True if successful, False if insufficient stock.
+    Returns (True, []) if successful, (False, [missing_material_names]) if insufficient stock.
     """
     # 1. Fetch the BOM for this finished product
     boms = session.query(BOM).filter(BOM.finished_product_id == product_id).all()
     if not boms:
-        # If no BOM, technically no materials are needed, but this might be an error state.
         logger.warning(f"Product {product_id} has no BOM.")
-        return True
+        return True, []
     
     # 2. Check if we have enough stock for all materials
     material_needs = {}
@@ -41,28 +40,36 @@ def reserve_materials(session: Session, product_id: int, quantity: int) -> bool:
     ).with_for_update().all()  # Lock rows
 
     inv_map = {inv.product_id: inv for inv in inventory_items}
+    
+    # Check all materials and compile missing list
+    missing_materials = []
+    
+    # We need product names to make it user friendly
+    products = session.query(Product).filter(Product.id.in_(material_needs.keys())).all()
+    product_map = {p.id: p.name for p in products}
 
     # Verify all required materials exist and have sufficient free quantity
     for mat_id, needed_qty in material_needs.items():
         inv = inv_map.get(mat_id)
+        mat_name = product_map.get(mat_id, f"ID {mat_id}")
+        
         if not inv:
-            logger.warning(f"Material {mat_id} not found in inventory.")
-            return False
+            missing_materials.append(f"{mat_name} (Need {needed_qty}, Have 0)")
+            continue
         
         free_stock = inv.quantity - inv.reserved
         if free_stock < needed_qty:
-            logger.warning(
-                f"Insufficient stock for material {mat_id}. "
-                f"Need: {needed_qty}, Free: {free_stock}"
-            )
-            return False
+            missing_materials.append(f"{mat_name} (Need {needed_qty}, Have {free_stock})")
+
+    if missing_materials:
+        return False, missing_materials
 
     # 3. All good, reserve the materials
     for mat_id, needed_qty in material_needs.items():
         inv = inv_map[mat_id]
         inv.reserved += needed_qty
 
-    return True
+    return True, []
 
 
 def consume_materials(session: Session, product_id: int, quantity: int) -> None:

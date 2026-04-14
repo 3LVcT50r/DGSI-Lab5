@@ -35,12 +35,16 @@ def refresh():
 
 st.title("🏭 3D Printer Factory Simulation")
 
-# Fetch overall status
+# Fetch overall status and mapping
 status = fetch_data("simulate/status")
+products = fetch_data("products")
 
-if status is None:
+if status is None or products is None:
     st.warning("Cannot connect to backend. Is FastAPI running on port 8000?")
     st.stop()
+
+# Build Product Map { id -> name }
+product_map = {p["id"]: p["name"] for p in products}
 
 current_day = status.get("current_day", 0)
 
@@ -56,31 +60,16 @@ if st.sidebar.button("🔄 Reset Simulation"):
     refresh()
 
 st.sidebar.markdown("---")
-st.sidebar.header("Purchasing")
+st.sidebar.header("Purchasing (Raw Materials)")
 
 suppliers = fetch_data("suppliers")
-products_list = fetch_data("inventory")  # to get product names, but let's fetch BOM instead
-# Better yet, the suppliers endpoint has products we can just look up.
 if suppliers:
-    supp_options = {s["name"]: s["id"] for s in suppliers}
-    selected_supp_name = st.sidebar.selectbox("Supplier", list(supp_options.keys()))
-    selected_supp_id = supp_options[selected_supp_name]
-    
-    # Filter products for selected supplier
-    supp_products = [s for s in suppliers if s["id"] == selected_supp_id]
-    
-    # Since we lack a direct product lookup, we will just use the product_id of the supplier
-    # A single supplier object in our model represents 1 product offering.
-    # Wait, our Supplier model has product_id. Let's group them by name in UI if they have same name
-    
-    # Let's rebuild supp_options as unique supplier names
     unique_supp_names = list(set([s["name"] for s in suppliers]))
     selected_supp_name = st.sidebar.selectbox("Supplier Name", unique_supp_names)
     
-    # Get products for this supplier name
     supp_items = [s for s in suppliers if s["name"] == selected_supp_name]
     
-    item_options = {f"Prod ID: {s['product_id']} (${s['unit_cost']})": s for s in supp_items}
+    item_options = {f"{product_map.get(s['product_id'], 'Unknown')} (${s['unit_cost']})": s for s in supp_items}
     selected_item_label = st.sidebar.selectbox("Product", list(item_options.keys()))
     selected_item = item_options[selected_item_label]
     
@@ -103,6 +92,7 @@ with col1:
     pending_orders = status.get("pending_orders", [])
     if pending_orders:
         df_orders = pd.DataFrame(pending_orders)
+        df_orders["Product"] = df_orders["product_id"].map(product_map)
         
         # Display selected orders for manual release
         selected_order_id = st.selectbox("Select Pending Order to Release Manually", df_orders["id"].tolist())
@@ -110,7 +100,7 @@ with col1:
             post_data(f"orders/{selected_order_id}/release")
             refresh()
             
-        st.dataframe(df_orders, use_container_width=True)
+        st.dataframe(df_orders[["id", "Product", "quantity", "created_date", "status"]], use_container_width=True)
     else:
         st.info("No pending orders.")
 
@@ -118,22 +108,22 @@ with col1:
     open_pos = status.get("open_purchase_orders", [])
     if open_pos:
         df_pos = pd.DataFrame(open_pos)
-        st.dataframe(df_pos, use_container_width=True)
+        df_pos["Product"] = df_pos["product_id"].map(product_map)
+        st.dataframe(df_pos[["id", "Product", "quantity", "expected_delivery", "status"]], use_container_width=True)
     else:
         st.info("No open purchase orders.")
-
 
 with col2:
     st.markdown("### 📦 Inventory Levels")
     inventory_levels = status.get("inventory_levels", [])
     if inventory_levels:
         df_inv = pd.DataFrame(inventory_levels)
-        # Assuming product lookup is hard without an endpoint, but we can display IDs and Quantities
-        # color code: < 5 red
-        def highlight_stock(s):
-            return ['background-color: #ffcccc' if v < 5 else '' for v in s]
+        df_inv["Product"] = df_inv["product_id"].map(product_map)
         
-        st.dataframe(df_inv.style.map(lambda v: 'background-color: #ffcccc' if float(v) < 5 else '', subset=['quantity']), use_container_width=True)
+        # format columns
+        df_inv_viz = df_inv[["Product", "quantity", "reserved"]]
+        
+        st.dataframe(df_inv_viz.style.map(lambda v: 'background-color: #ffcccc' if float(v) < 5 else '', subset=['quantity']), use_container_width=True)
     else:
         st.info("No inventory data.")
 
@@ -145,21 +135,17 @@ with col2:
     else:
         st.info("No events logged yet.")
 
-
 # Charts
 st.markdown("---")
 st.markdown("### 📈 Charts")
 
 if events:
-    # Example chart: Cumulative Finished Orders
     df_events = pd.DataFrame(events)
-    # filter for completions
     completions = df_events[df_events["type"] == "order_completed"]
     if not completions.empty:
         qty_extract = completions["details"].apply(lambda x: x.get("qty", 0))
         completions = completions.assign(completed_qty=qty_extract)
         
-        # Agrupar por dia
         daily_completions = completions.groupby("sim_date")["completed_qty"].sum().reset_index()
         daily_completions["cumulative"] = daily_completions["completed_qty"].cumsum()
         

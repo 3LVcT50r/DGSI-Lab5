@@ -133,8 +133,9 @@ def advance_day(session: Session) -> Dict[str, Any]:
         # materials reach zero. That's implicitly logged during reservation attempt failures later.
 
     # 4. Consume materials & Start new orders (up to remaining daily capacity)
+    # We evaluate both totally new PENDING and those that were blocked before.
     pending = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.PENDING
+        ManufacturingOrder.status.in_([OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS])
     ).order_by(ManufacturingOrder.created_date.asc()).all()
 
     started_qty_today = 0
@@ -143,7 +144,8 @@ def advance_day(session: Session) -> Dict[str, Any]:
             continue # Exceeds capacity, wait for tomorrow
         
         # Try to reserve materials
-        if reserve_materials(session, mo.product_id, mo.quantity):
+        success, missing_info = reserve_materials(session, mo.product_id, mo.quantity)
+        if success:
             # Consume those reserved materials immediately since we are starting production
             consume_materials(session, mo.product_id, mo.quantity)
             
@@ -154,7 +156,12 @@ def advance_day(session: Session) -> Dict[str, Any]:
             log_event(session, EventType.ORDER_STARTED, today, {"order_id": mo.id, "qty": mo.quantity})
         else:
             # Failed to start due to material constraint
-            log_event(session, EventType.STOCKOUT, today, {"order_id": mo.id, "reason": "Insufficient materials"})
+            mo.status = OrderStatus.WAITING_FOR_MATERIALS
+            log_event(session, EventType.STOCKOUT, today, {
+                "order_id": mo.id, 
+                "reason": "Insufficient materials",
+                "missing": missing_info
+            })
 
     # 5. Generate demand for next simulation cycle
     generate_demand(session, today, settings)
@@ -168,7 +175,7 @@ def get_simulation_status(session: Session) -> SimulationStatus:
     day = get_current_day(session)
     
     pending_mos = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.PENDING
+        ManufacturingOrder.status.in_([OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS])
     ).all()
     
     open_pos = session.query(PurchaseOrder).filter(
@@ -206,11 +213,12 @@ def release_order(session: Session, order_id: int) -> ManufacturingOrderRead:
     mo = session.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()
     if not mo:
         raise ValueError("Order not found.")
-    if mo.status != OrderStatus.PENDING:
+    if mo.status not in [OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS]:
         raise ValueError(f"Order is in status {mo.status.value}, cannot release.")
         
     day = get_current_day(session)
-    if reserve_materials(session, mo.product_id, mo.quantity):
+    success, missing_info = reserve_materials(session, mo.product_id, mo.quantity)
+    if success:
         # We just reserve. The advance_day cycle will pick it up and consume.
         # But wait, PRD says user manually releases. If they manually release, should it be IN_PROGRESS?
         # A true manual release just means "approved for production".
@@ -224,7 +232,7 @@ def release_order(session: Session, order_id: int) -> ManufacturingOrderRead:
         session.commit()
         return ManufacturingOrderRead.model_validate(mo)
     else:
-        raise ValueError("Insufficient materials to release order.")
+        raise ValueError(f"Insufficient materials to release order. Missing: {', '.join(missing_info)}")
 
 
 def create_purchase_order(session: Session, supplier_id: int, product_id: int, quantity: int, expected_delivery: int) -> PurchaseOrderRead:

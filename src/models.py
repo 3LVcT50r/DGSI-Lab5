@@ -30,6 +30,7 @@ class ProductType(str, enum.Enum):
 class OrderStatus(str, enum.Enum):
     """Lifecycle states for a manufacturing order."""
     PENDING = "pending"
+    WAITING_FOR_MATERIALS = "waiting_for_materials"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
 
