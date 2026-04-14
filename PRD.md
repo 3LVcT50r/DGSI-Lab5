@@ -1,549 +1,775 @@
-# Product Requirements Document: 3D Printer Production Simulator
+# Product Requirements Document (PRD)
 
-## What This Is
+# 3D Printer Factory Simulation System
 
-A production-grade simulation system that models a 3D printing farm environment. The simulator creates realistic printer behaviors, job queues, material consumption, and failure scenarios to test monitoring systems, validate scheduling algorithms, train operators, and perform load testing on backend APIs without requiring physical hardware.
-
----
-
-## Tech Stack
-
-| Component | Technology | Rationale |
-|-----------|------------|-----------|
-| **Language** | Python 3.11+ | Strong typing, rich ecosystem for simulation & APIs |
-| **API Framework** | FastAPI + Pydantic | Async support, auto OpenAPI docs, validation |
-| **Dashboard UI** | Streamlit | Rapid development, real-time updates, charts built-in |
-| **Database** | SQLite + SQLAlchemy | Zero-config, portable, easy testing, scales to medium load |
-| **Simulation Engine** | SimPy | Proven discrete-event simulation, handles concurrent processes |
-| **Charts/Visualization** | matplotlib | Flexible, Streamlit-compatible via `st.pyplot()` |
-| **Task Queue** | asyncio + internal queue | Built-in, sufficient for simulated workloads |
-| **Config Management** | pydantic-settings | Type-safe env var/config file management |
+**Version:** 1.0
+**Date:** 2026-03-26
+**Status:** Draft
 
 ---
 
-## Architecture
+## 1. Executive Summary
 
-### High-Level Overview
+### 1.1 Purpose
+This document defines the requirements for a discrete-event simulation system that models the production lifecycle of a 3D printer manufacturing factory. The system puts the user in the role of production planner, requiring them to balance inventory levels, production capacity, supplier lead times, and customer demand.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        PRESENTATION LAYER                       │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────────┐         ┌─────────────────────────┐   │
-│  │   Streamlit Dashboard│         │     REST API (FastAPI)  │   │
-│  │  - Real-time status  │         │  - Job management       │   │
-│  │  - Printer visuals   │         │  - Configuration        │   │
-│  │  - Analytics charts  │         │  - Simulation controls  │   │
-│  └──────────┬───────────┘         └──────────┬──────────────┘   │
-└─────────────┼────────────────────────────────┼──────────────────┘
-              │                                │
-              ▼                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         SERVICE LAYER                           │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
-│  │ Job Service      │  │ Printer Service  │  │ SimEngine     │  │
-│  │ - Queue mgmt     │  │ - Status tracking│  │ - SimPy core  │  │
-│  │ - Scheduling     │  │ - Assignment     │  │ - Time control│  │
-│  │ - Priority logic │  │ - Failure inject │  │ - Event hooks │  │
-│  └──────────────────┘  └──────────────────┘  └───────────────┘  │
-│  ┌──────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ Material Service │  │ Notification Service                │  │
-│  │ - Inventory      │  │ - Alerts, webhooks, logging         │  │
-│  │ - Consumption    │  │                                     │  │
-│  └──────────────────┘  └─────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                          DATA LAYER                             │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  SQLite Database (SQLAlchemy ORM)                       │    │
-│  │  - printers, jobs, materials, events, logs              │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-```
+### 1.2 Target Users
+- Industrial engineering students learning production planning concepts
+- Operations management trainers demonstrating supply chain dynamics
+- Hobbyists interested in simulation and logistics
 
-### Key Architecture Decisions
+### 1.3 Success Criteria
+- Successfully simulates day-by-day production cycles
+- Allows users to make meaningful decisions about production and purchasing
+- Provides clear visibility into inventory, orders, and events
+- Exports/imports state for persistence and analysis
 
-| Decision | Choice | Reasoning |
-|----------|--------|-----------|
-| **Simulation paradigm** | Discrete-event (SimPy) | Natural fit for print jobs, failures, maintenance as events |
-| **Sync vs Async API** | Async (asyncio) | Handles concurrent printer polling, dashboard updates efficiently |
-| **State storage** | Relational (SQLite) | Complex queries, relationships, ACID guarantees for auditability |
-| **Separation of concerns** | Service layer pattern | Business logic decoupled from API routes, testable in isolation |
-| **Time model** | Simulated time (SimPy) | Can speed up/slow down simulation, replay scenarios deterministically |
+---
 
-### Simulation Design
+## 2. Objectives
+
+Build a software system that simulates, day by day, the full production cycle of a factory that manufactures 3D printers. The focus is on inventory management, purchasing, and production planning.
+
+**Key Challenges Modeled:**
+- Balancing inventory costs against stockout risks
+- Managing production capacity constraints
+- Coordinating purchase orders with lead times
+- Responding to stochastic demand patterns
+
+---
+
+## 3. Functional Requirements
+
+### 3.1 R0 — Initial Configuration
+
+**Description:** Define all static parameters required to run the simulation.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| Bill of Materials (BOM) | Per model | Raw materials needed per finished product with quantities |
+| Assembly Time | Per model | Production time required for each printer model |
+| Supplier Catalog | List | Products, prices (tiered by quantity), lead times |
+| Warehouse Capacity | Scalar | Maximum storage units (simplified: 1 material unit = 1 storage unit) |
+| Production Capacity | Scalar | Maximum units producible per day |
+
+**Acceptance Criteria:**
+- BOM can be defined for multiple printer models
+- Suppliers can offer same products at different price points
+- Configuration can be persisted and loaded
+
+### 3.2 R1 — Demand Generation
+
+**Description:** At the start of each simulated day, manufacturing orders are generated randomly.
+
+**Parameters:**
+- Mean demand per model (configurable)
+- Variance/std deviation (configurable)
+- Distribution type (default: normal, truncated at 0)
+
+**Acceptance Criteria:**
+- Orders generated automatically when day advances
+- Parameters configurable via UI or configuration file
+- Random seed option for reproducible runs
+
+### 3.3 R2 — Control Dashboard
+
+**Description:** Central view displaying current state of the simulation.
+
+**Display Elements:**
+- Pending manufacturing orders with status
+- BOM breakdown for each order (materials required)
+- Current inventory levels (stock on hand)
+- Shortage indicators (materials below threshold)
+
+**Acceptance Criteria:**
+- All data visible in single dashboard view
+- Inventory updates reflect pending order reservations
+
+### 3.4 R3 — User Decisions
+
+**Description:** Interactive controls for production planner actions.
+
+**User Actions:**
+| Action | Inputs | Effect |
+|--------|--------|--------|
+| Release Order | Order ID | Moves order from pending to production queue |
+| Issue Purchase Order | Supplier, Product, Quantity, Date | Creates PO; materials arrive after lead time |
+
+**Acceptance Criteria:**
+- Release only succeeds if materials available
+- Purchase orders validate against supplier catalog
+- User receives feedback on action success/failure
+
+### 3.5 R4 — Event Simulation
+
+**Description:** Core simulation logic processes events within each day cycle.
+
+**Events Modeled:**
+- Raw material consumption during manufacturing (limited by daily capacity)
+- Purchase order arrivals according to supplier lead time
+- Order completion notifications
+
+**Acceptance Criteria:**
+- Consumption respects capacity limits
+- Lead times correctly delay material arrivals
+- Events logged with timestamps
+
+### 3.6 R5 — Calendar Advance
+
+**Description:** Manual progression of simulated time.
+
+**Control:** "Advance Day" button triggers 24-hour simulation cycle.
+
+**Sequence:**
+1. Increment day counter
+2. Generate new demand
+3. Process purchase arrivals
+4. Complete in-progress production
+5. Consume materials for started orders
+6. Log all events
+
+**Acceptance Criteria:**
+- Single click advances simulation exactly one day
+- All sub-processes execute in correct order
+- UI refreshes with updated state
+
+### 3.7 R6 — Event Log
+
+**Description:** Historical record of all simulation events.
+
+**Logged Events:**
+- Order created
+- Order released to production
+- Order completed
+- Material consumed
+- Purchase order issued
+- Purchase order received
+- Stockout events
+
+**Acceptance Criteria:**
+- Every state-changing operation creates log entry
+- Log supports filtering by event type/date
+- Data usable for chart generation
+
+### 3.8 R7 — JSON Import/Export
+
+**Description:** Persist and restore simulation state.
+
+**Exportable State:**
+- Current inventory levels
+- All orders (manufacturing and purchase)
+- Event history
+- Configuration snapshot
+
+**Acceptance Criteria:**
+- Export generates valid JSON file
+- Import restores exact simulation state
+- Round-trip (export then import) preserves integrity
+
+### 3.9 R8 — REST API
+
+**Description:** All functionality accessible via HTTP endpoints.
+
+**Requirements:**
+- Every UI capability exposed as API endpoint
+- Automatic Swagger/OpenAPI documentation
+- Consistent error handling and response formats
+- CORS enabled for web client
+
+**Acceptance Criteria:**
+- OpenAPI spec accessible at `/docs`
+- All CRUD operations testable via API
+- Response schemas documented with Pydantic models
+
+---
+
+## 4. Non-Functional Requirements
+
+### 4.1 Code Quality
+- Clean, commented code following PEP 8
+- Version controlled with Git
+- Modular architecture separating concerns
+
+### 4.2 Interface
+- Simple web interface via Streamlit
+- No complex client-side installation required
+- Responsive layout working on standard displays
+
+### 4.3 Portability
+- Cross-platform: Windows, macOS, Linux
+- Python 3.11+ runtime
+- No platform-specific dependencies
+
+### 4.4 Performance
+- Simulated day processing < 1 second real time
+- Dashboard renders in < 500ms
+- Supports 1000+ days of simulation history
+
+### 4.5 Data Integrity
+- All state changes atomic
+- No partial updates on failure
+- Import validation before applying changes
+
+---
+
+## 5. Technical Architecture
+
+### 5.1 Technology Stack
+
+| Layer | Technology | Rationale |
+|-------|------------|-----------|
+| Language | Python 3.11+ | Readability, ecosystem |
+| Simulation | SimPy | Discrete-event engine, battle-tested |
+| Persistence | SQLite + JSON | Lightweight, portable, queryable |
+| Backend/API | FastAPI + Pydantic | Auto-generated OpenAPI docs, async support |
+| UI | Streamlit | Rapid prototyping, matplotlib integration |
+| Charts | matplotlib | Direct Streamlit compatibility |
+| Version Control | Git + GitHub | Standard workflow |
+
+### 5.2 Alternative Simulation Approach
+
+If SimPy is not preferred, a simplified turn-based loop may be used:
 
 ```python
-# Core simulation flow
-class PrintJobSimulator:
-    """Simulates a single print job lifecycle."""
+def advance_day():
+    day += 1
+    generate_demand()
+    process_purchase_arrivals()
+    complete_production()
+    consume_materials()
+    log_events()
+```
 
-    phases = [
-        "preheat",           # 2-5 min
-        "print_layer",       # Repeated per layer
-        "cool_down",         # 5-15 min
-        "remove_part"        # Manual simulation
-    ]
+**Justification Required:** Any alternative must be justified in implementation notes explaining trade-offs vs. SimPy's event queue, preemption, and process modeling capabilities.
 
-    failure_points = [
-        ("spool_runout", 0.02),      # 2% chance per job
-        ("bed_adhesion", 0.03),      # 3% chance at start
-        ("hotend_clog", 0.01),       # 1% chance mid-print
-        ("power_interrupt", 0.005)   # 0.5% chance anytime
-    ]
+### 5.3 System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Streamlit UI                           │
+│  (Dashboard, Forms, Charts)                                 │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI Layer                            │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ Orders API   │ │ Inventory API│ │ Purchasing API│       │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ Simulation   │ │  Admin API   │ │  Swagger     │        │
+│  │ API          │ │              │ │  /docs       │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Business Logic Layer                       │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ Simulator    │ │   BOM        │ │   Inventory  │        │
+│  │ Engine       │ │   Manager    │ │   Service    │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ Order        │ │  Purchase    │ │   Event      │        │
+│  │ Manager      │ │   Manager    │ │   Logger     │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Persistence Layer                          │
+│  ┌─────────────────────┐  ┌─────────────────────┐          │
+│  │   SQLite Database   │  │   JSON Export       │          │
+│  └─────────────────────┘  └─────────────────────┘          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Data Model
+## 6. Data Model
 
-### Entity Relationship Diagram
+### 6.1 Entity Relationship Diagram
 
 ```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│    Printer      │       │     Job         │       │   FilamentSpool │
-├─────────────────┤       ├─────────────────┤       ├─────────────────┤
-│ id (PK)         │──────<│ id (PK)         │       │ id (PK)         │
-│ name            │       │ printer_id(FK) >│       │ name            │
-│ model           │       │ status          │       │ material_type   │
-│ status          │       │ priority        │       │ color           │
-│ bed_size_x      │       │ estimated_time  │       │ weight_grams    │
-│ bed_size_y      │       │ actual_time     │       │ price_per_kg    │
-│ bed_size_z      │       │ spool_id(FK) >  │       │ provider        │
-│ temperature     │       │ started_at      │       │ created_at      │
-│ last_maintenance│       │ completed_at    │       └─────────────────┘
-│ firmware_version│       │ failure_reason  │
-│ created_at      │       │ progress_pct    │
-│ updated_at      │       │ gcode_file_path │
-└─────────────────┘       │ metadata(JSON)  │
-        │                 └─────────────────┘
-        │                         │
-        │                         │ consumes
-        │                         ▼
-        │                 ┌─────────────────┐
-        │                 │  MaterialUsage  │
-        │                 ├─────────────────┤
-        │                 │ id (PK)         │
-        │                 │ job_id (FK)     │
-        │                 │ spool_id (FK)   │
-        │                 │ grams_used      │
-        │                 │ timestamp       │
-        │                 └─────────────────┘
-        │
-        │                 ┌─────────────────┐
-        └────────-------->|   Maintenance   │
-                          ├─────────────────┤
-                          │ id (PK)         │
-                          │ printer_id (FK) │
-                          │ type            │
-                          │ scheduled_at    │
-                          │ completed_at    │
-                          │ notes           │
-                          └─────────────────┘
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│   Product    │       │     BOM      │       │  Manufacturer│
+├──────────────┤       ├──────────────┤       ├──────────────┤
+│ id (PK)      │──┐    │ id (PK)      │◄─┐    │ id (PK)      │
+│ name         │  │    │ product_id   │  │    │ name         │
+│ type         │  └──►│ material_id  │──┘    │ contact      │
+│              │      │ quantity     │       │              │
+└──────────────┘      └──────────────┘       └──────────────┘
+                                │                      │
+                                │                      │
+                     ┌──────────▼──────────┐           │
+                     │    Inventory        │           │
+                     ├─────────────────────┤           │
+                     │ product_id (FK)     │◄──────────┘
+                     │ quantity            │    ┌──────────────┐
+                     │ last_updated        │    │PurchaseOrder │
+                     └─────────────────────┘    ├──────────────┤
+                                                │ id (PK)      │
+                     ┌─────────────────────┐    │ supplier_id  │
+                     │  ManufacturingOrder │    │ product_id   │
+                     ├─────────────────────┤    │ quantity     │
+                     │ id (PK)             │    │ issue_date   │
+                     │ created_date        │    │ expected_dt  │
+                     │ product_id (FK)     │    │ status       │
+                     │ quantity            │    └──────────────┘
+                     │ status              │
+                     │ start_date          │
+                     │ completed_date      │
+                     └─────────────────────┘
+
+                     ┌─────────────────────┐
+                     │       Event         │
+                     ├─────────────────────┤
+                     │ id (PK)             │
+                     │ type                │
+                     │ sim_date            │
+                     │ details (JSON)      │
+                     └─────────────────────┘
 ```
 
-### Core Entities
+### 6.2 Schema Definition
 
-#### Printer
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique identifier |
-| `name` | string | Human-readable name (e.g., "Prusa-MK4-01") |
-| `model` | string | Printer model |
-| `status` | enum | `idle`, `printing`, `paused`, `error`, `maintenance` |
-| `bed_size` | tuple | (x, y, z) in mm |
-| `current_temp` | float | Hotend temperature |
-| `bed_temp` | float | Heated bed temperature |
-| `current_job_id` | FK | Reference to active job |
-| `firmware_version` | string | Firmware version |
-| `created_at` | datetime | Creation timestamp |
-| `updated_at` | datetime | Last update timestamp |
+#### Product
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| name | TEXT | NOT NULL, UNIQUE |
+| type | TEXT | NOT NULL CHECK(type IN ('raw', 'finished')) |
 
-#### Job
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique identifier |
-| `name` | string | Job/display name |
-| `printer_id` | FK | Assigned printer (nullable until assigned) |
-| `status` | enum | `queued`, `assigned`, `printing`, `paused`, `completed`, `failed`, `cancelled` |
-| `priority` | int | 1-10, higher = more urgent |
-| `estimated_duration_min` | int | Estimated print time |
-| `actual_duration_min` | int | Actual time (populated on completion) |
-| `spool_id` | FK | Filament spool reference |
-| `layer_height` | float | Slice setting |
-| `infill_percentage` | int | Slice setting |
-| `support_material` | bool | Slice setting |
-| `started_at` | datetime | When printing began |
-| `completed_at` | datetime | When finished |
-| `failure_reason` | string | If failed, reason code |
-| `progress_percent` | float | 0-100 current progress |
-| `gcode_metadata` | JSON | Layer count, filament length, etc. |
+#### BOM (Bill of Materials)
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| finished_product_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id |
+| material_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id |
+| quantity | REAL | NOT NULL CHECK(quantity > 0) |
 
-#### FilamentSpool
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique identifier |
-| `name` | string | Spool identifier |
-| `material_type` | enum | `PLA`, `PETG`, `ABS`, `TPU`, etc. |
-| `color` | string | Color name or hex code |
-| `initial_weight_grams` | int | Original weight |
-| `remaining_weight_grams` | int | Current weight |
-| `price_per_kg` | float | Cost reference |
-| `provider` | string | Manufacturer/vendor |
-| `created_at` | datetime |入库 timestamp |
+#### Supplier
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| name | TEXT | NOT NULL |
+| product_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id |
+| unit_cost | REAL | NOT NULL |
+| lead_time_days | INTEGER | NOT NULL |
+| min_order_qty | INTEGER | DEFAULT 1 |
 
-#### MaintenanceRecord
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique identifier |
-| `printer_id` | FK | Which printer |
-| `type` | enum | `calibration`, `nozzle_replace`, `bed_level`, `lubrication`, `other` |
-| `scheduled_at` | datetime | Planned date |
-| `completed_at` | datetime | Actual completion |
-| `duration_min` | int | How long it took |
-| `notes` | text | Technician notes |
+#### Inventory
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| product_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id, UNIQUE |
+| quantity | REAL | NOT NULL DEFAULT 0 |
+| reserved | REAL | NOT NULL DEFAULT 0 |
 
-#### SimulationEvent (Audit Log)
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | UUID | Unique identifier |
-| `timestamp` | datetime | When event occurred |
-| `event_type` | string | Job started, printer error, etc. |
-| `entity_type` | string | printer, job, material |
-| `entity_id` | UUID | Affected entity |
-| `details` | JSON | Event-specific data |
-| `sim_time` | float | SimPy simulation time |
+#### ManufacturingOrder
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| created_date | INTEGER | NOT NULL |
+| product_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id |
+| quantity | INTEGER | NOT NULL |
+| status | TEXT | NOT NULL DEFAULT 'pending' |
+| start_date | INTEGER | NULL |
+| completed_date | INTEGER | NULL |
+
+#### PurchaseOrder
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| supplier_id | INTEGER | NOT NULL, FOREIGN KEY → Supplier.id |
+| product_id | INTEGER | NOT NULL, FOREIGN KEY → Product.id |
+| quantity | INTEGER | NOT NULL |
+| issue_date | INTEGER | NOT NULL |
+| expected_delivery | INTEGER | NOT NULL |
+| status | TEXT | NOT NULL DEFAULT 'open' |
+
+#### Event
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | INTEGER | PRIMARY KEY, AUTOINCREMENT |
+| type | TEXT | NOT NULL |
+| sim_date | INTEGER | NOT NULL |
+| details | TEXT | NOT NULL (JSON format) |
 
 ---
 
-## API Endpoints
+## 7. Configuration Example
 
-### Base URL: `/api/v1`
+### 7.1 Production Plan (JSON)
 
-#### Printers
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/printers` | List all printers with pagination |
-| POST | `/printers` | Create a new printer |
-| GET | `/printers/{id}` | Get printer details |
-| PUT | `/printers/{id}` | Update printer configuration |
-| DELETE | `/printers/{id}` | Remove printer |
-| POST | `/printers/{id}/pause` | Pause current job |
-| POST | `/printers/{id}/resume` | Resume paused job |
-| POST | `/printers/{id}/cancel` | Cancel current job |
-| GET | `/printers/{id}/history` | Job history for printer |
-
-#### Jobs
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/jobs` | List jobs with filters (status, priority) |
-| POST | `/jobs` | Create new print job |
-| GET | `/jobs/{id}` | Get job details |
-| PUT | `/jobs/{id}` | Update job (priority, assignment) |
-| DELETE | `/jobs/{id}` | Cancel/remove job |
-| POST | `/jobs/{id}/assign` | Assign to printer |
-| GET | `/jobs/{id}/progress` | Get live progress |
-
-#### Materials / Filament
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/materials/spools` | List all spools |
-| POST | `/materials/spools` | Add new spool |
-| GET | `/materials/spools/{id}` | Get spool details |
-| PUT | `/materials/spools/{id}` | Update spool info |
-| GET | `/materials/usage` | Usage history |
-
-#### Simulation Control
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/simulation/start` | Start/resume simulation |
-| POST | `/simulation/pause` | Pause simulation |
-| POST | `/simulation/stop` | Stop simulation |
-| GET | `/simulation/status` | Current sim state |
-| POST | `/simulation/time-scale` | Set sim speed (0.5x, 1x, 10x, etc.) |
-| POST | `/simulation/inject-failure` | Manually inject failure scenario |
-| GET | `/simulation/events` | Event log |
-
-#### Analytics
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/analytics/farm-utilization` | Overall utilization metrics |
-| GET | `/analytics/job-stats` | Completion rates, avg times |
-| GET | `/analytics/material-consumption` | Filament usage reports |
-| GET | `/analytics/maintenance-schedule` | Upcoming/completed maintenance |
-
-### Example Request/Response
-
-**POST /api/v1/jobs**
 ```json
-// Request
 {
-  "name": "Prototype-Casing-V3",
-  "priority": 7,
-  "estimated_duration_min": 180,
-  "spool_id": "uuid-of-spool",
-  "layer_height": 0.2,
-  "infill_percentage": 20,
-  "gcode_metadata": {
-    "layer_count": 950,
-    "filament_length_mm": 4200,
-    "file_size_mb": 8.4
+  "capacity_per_day": 10,
+  "warehouse_capacity": 500,
+  "models": {
+    "P3D-Classic": {
+      "assembly_time_hours": 4,
+      "bom": {
+        "kit_piezas": 1,
+        "pcb": 1,
+        "pcb_ref": "CTRL-V2",
+        "extrusor": 1,
+        "cables_conexion": 2,
+        "transformador_24v": 1,
+        "enchufe_schuko": 1
+      }
+    },
+    "P3D-Pro": {
+      "assembly_time_hours": 6,
+      "bom": {
+        "kit_piezas": 1,
+        "pcb": 1,
+        "pcb_ref": "CTRL-V3",
+        "extrusor": 1,
+        "sensor_autonivel": 1,
+        "cables_conexion": 3,
+        "transformador_24v": 1,
+        "enchufe_schuko": 1
+      }
+    }
   }
 }
+```
 
-// Response 201
+### 7.2 Demand Configuration
+
+```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "name": "Prototype-Casing-V3",
-  "status": "queued",
-  "priority": 7,
-  "created_at": "2026-03-26T10:30:00Z",
-  "queue_position": 3
+  "demand_distribution": "normal",
+  "default_mean": 5,
+  "default_variance": 2.0,
+  "model_specific_demand": {
+    "P3D-Classic": {"mean": 6, "variance": 2.5},
+    "P3D-Pro": {"mean": 3, "variance": 1.5}
+  },
+  "random_seed": null
+}
+```
+
+### 7.3 Supplier Catalog
+
+```json
+{
+  "suppliers": [
+    {
+      "id": 1,
+      "name": "Componentes ABC",
+      "products": [
+        {
+          "product": "kit_piezas",
+          "price_per_unit": 90.00,
+          "lead_time_days": 3,
+          "packaging": [{"qty": 1, "label": "unit"}, {"qty": 100, "label": "pallet"}]
+        },
+        {
+          "product": "pcb",
+          "price_per_unit": 25.00,
+          "lead_time_days": 5,
+          "packaging": [{"qty": 1, "label": "unit"}, {"qty": 50, "label": "box"}]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "EuroComponents Ltd",
+      "products": [
+        {
+          "product": "kit_piezas",
+          "price_per_unit": 85.00,
+          "lead_time_days": 7,
+          "packaging": [{"qty": 1, "label": "unit"}, {"qty": 200, "label": "pallet"}]
+        }
+      ]
+    }
+  ]
 }
 ```
 
 ---
 
-## Streamlit Dashboard Views
+## 8. User Interface Specification
 
-### 1. **Overview Dashboard**
-- Farm utilization gauge
-- Active printers grid with status indicators
-- Jobs in progress cards
-- Alerts/errors banner
+### 8.1 Layout Overview
 
-### 2. **Printer Detail View**
-- Selected printer status panel
-- Temperature graph (real-time)
-- Current job progress bar
-- Control buttons (pause, resume, cancel)
+```
+┌─────────────────────────────────────────────────────────────┐
+│  HEADER: Day [███████ 42 ███]  [ADVANCE DAY ▶]              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────┐  ┌─────────────────────────────┐  │
+│  │ ORDERS PANEL        │  │  INVENTORY PANEL            │  │
+│  ├─────────────────────┤  ├─────────────────────────────┤  │
+│  │ [Pending Orders]    │  │  Material        │ Stock    │  │
+│  │ • Ord #23: 8x P3D-C│  │  ───────────────────────────  │  │
+│  │ • Ord #24: 6x P3D-P│  │  kit_piezas      │  22      │  │
+│  │                     │  │  pcb             │  15      │  │
+│  │ [Release Selected]  │  │  extrusor        │   8  🔴  │  │
+│  └─────────────────────┘  │  ...                   │  │  │
+│                           └─────────────────────────────┘  │
+│                                                             │
+│  ┌─────────────────────┐  ┌─────────────────────────────┐  │
+│  │ PURCHASING          │  │  PRODUCTION                 │  │
+│  ├─────────────────────┤  ├─────────────────────────────┤  │
+│  │ Supplier: [▼]       │  │  Daily Capacity: [████░░] 7/10│  │
+│  │ Product: [▼]        │  │  Queue: 3 orders            │  │
+│  │ Qty: [___]          │  │  In Progress: 4             │  │
+│  │ [Issue PO]          │  │  Completed Today: 3         │  │
+│  └─────────────────────┘  └─────────────────────────────┘  │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ CHARTS                                                  │  │
+│  ├───────────────────────────────────────────────────────┤  │
+│  │ [Stock Levels Over Time]  [Completed Orders Chart]    │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │ EVENT LOG (Last 50)                                   │  │
+│  ├───────────────────────────────────────────────────────┤  │
+│  │ Day 42: Completed order #21 (6x P3D-Pro)              │  │
+│  │ Day 42: Received PO #15 (20x kit_piezas)              │  │
+│  │ Day 42: Consumed materials for order #22              │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 3. **Job Queue Manager**
-- Sortable/filterable job table
-- Drag-and-drop reordering (priority)
-- Bulk actions (assign, cancel)
-- Queue analytics sidebar
+### 8.2 Component Specifications
 
-### 4. **Materials Inventory**
-- Spool list with remaining % gauges
-- Low-stock alerts
-- Material consumption charts
-- Cost analysis view
+| Component | Type | Behavior |
+|-----------|------|----------|
+| Day Display | Read-only | Shows current simulation day |
+| Advance Day Button | Primary Action | Triggers simulation cycle |
+| Orders Table | Data Grid | Sortable, filterable, selectable |
+| Inventory Panel | Status Cards | Color-coded shortage warnings |
+| Supplier Dropdown | Select | Filtered by availability |
+| Product Dropdown | Select | Shows purchasable items |
+| Qty Input | Number | Validates against min order qty |
+| Charts | Plot | matplotlib rendered in Streamlit |
+| Event Log | Scrollable List | Filters by event type |
 
-### 5. **Analytics Report**
-- Utilization trends over time
-- Print success/failure rate
-- Average print duration histogram
-- Material cost per period
+### 8.3 Color Coding
 
-### 6. **Simulation Controls**
-- Start/stop/pause controls
-- Speed multiplier slider
-- Scenario picker (pre-configured)
-- Failure injection panel
+| State | Color | Usage |
+|-------|-------|-------|
+| Normal | Green | Inventory ≥ 2x daily need |
+| Warning | Yellow | Inventory < 2x daily need |
+| Critical | Red | Inventory = 0 or negative |
 
 ---
 
-## Coding Conventions
+## 9. API Specification
 
-- **Type hints everywhere** — Use explicit types for all function signatures
-- **Pydantic models for schemas** — All API request/response validated through Pydantic
-- **Service-layer separation** — API routes contain only HTTP logic; business logic in services
-- **Docstrings** — Google-style docstrings for public functions/classes
-- **Configuration** — All settings via `.env` or `config.yaml` using pydantic-settings
-- **Logging** — Structured logging with context (sim_time, entity_id)
-- **Testing** — pytest with coverage; unit tests for services, integration tests for API
-
-### Project Structure
+### 9.1 Base URL
 ```
-src/
-├── api/
+http://localhost:8000/api/v1
+```
+
+### 9.2 Endpoints
+
+#### Simulation Control
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/simulate/advance` | Advance simulation by one day |
+| GET | `/simulate/status` | Get current simulation state |
+| POST | `/simulate/reset` | Reset simulation to initial state |
+
+#### Orders
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/orders` | List all manufacturing orders |
+| GET | `/orders/{id}` | Get specific order details |
+| POST | `/orders/{id}/release` | Release order to production |
+| DELETE | `/orders/{id}` | Cancel pending order |
+
+#### Inventory
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/inventory` | List all inventory items |
+| GET | `/inventory/{product_id}` | Get specific item stock |
+
+#### Purchasing
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/purchase-orders` | List all purchase orders |
+| POST | `/purchase-orders` | Create new purchase order |
+| POST | `/purchase-orders/{id}/cancel` | Cancel open PO |
+| GET | `/suppliers` | List all suppliers |
+| GET | `/suppliers/{id}/catalog` | Get supplier product catalog |
+
+#### BOM
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/bom` | List all BOM definitions |
+| GET | `/bom/product/{product_id}` | Get BOM for specific product |
+| GET | `/bom/calculate` | Calculate materials for order |
+
+#### Events & History
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/events` | List all events (filterable) |
+| GET | `/events/export` | Export events as JSON |
+
+#### Import/Export
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/state/export` | Export full simulation state |
+| POST | `/state/import` | Import simulation state |
+
+### 9.3 OpenAPI Documentation
+
+Auto-generated at `/docs` via FastAPI's built-in Swagger UI.
+
+---
+
+## 10. Project Structure
+
+```
+DGSI-Lab5/
+├── src/
 │   ├── __init__.py
-│   ├── routers/
-│   │   ├── printers.py
-│   │   ├── jobs.py
-│   │   ├── materials.py
+│   ├── main.py              # FastAPI application entry point
+│   ├── config.py            # Configuration management
+│   ├── database.py          # SQLite connection management
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── product.py
+│   │   ├── bom.py
+│   │   ├── order.py
+│   │   ├── purchase_order.py
+│   │   └── event.py
+│   ├── schemas/             # Pydantic models
+│   │   ├── __init__.py
+│   │   ├── request.py
+│   │   └── response.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── simulator.py     # SimPy simulation engine
+│   │   ├── inventory.py
+│   │   ├── production.py
+│   │   ├── purchasing.py
+│   │   └── event_logger.py
+│   ├── api/                 # API route handlers
+│   │   ├── __init__.py
 │   │   ├── simulation.py
-│   │   └── analytics.py
-│   └── dependencies.py
-├── services/
+│   │   ├── orders.py
+│   │   ├── inventory.py
+│   │   ├── purchasing.py
+│   │   └── export.py
+│   └── ui/                  # Streamlit application
+│       └── app.py
+├── tests/
 │   ├── __init__.py
-│   ├── printer_service.py
-│   ├── job_service.py
-│   ├── material_service.py
-│   └── notification_service.py
-├── simulation/
-│   ├── __init__.py
-│   ├── engine.py
-│   ├── processes.py
-│   └── scenarios.py
-├── models/
-│   ├── __init__.py
-│   ├── database.py
-│   ├── printer.py
-│   ├── job.py
-│   └── material.py
-├── schemas/
-│   ├── __init__.py
-│   ├── printer.py
-│   ├── job.py
-│   └── material.py
-├── config/
-│   ├── settings.py
-│   └── default.yaml
-├── utils/
-│   ├── __init__.py
-│   └── helpers.py
-└── main.py
-
-dashboard/
-├── app.py
-├── pages/
-│   ├── 1_Printers.py
-│   ├── 2_Jobs.py
-│   ├── 3_Materials.py
-│   ├── 4_Analytics.py
-│   └── 5_Simulation.py
-└── components/
-    └── printer_card.py
-
-tests/
-├── unit/
-├── integration/
-└── fixtures/
-
-requirements.txt
-README.md
-.env.example
-PRD.md
+│   ├── test_simulation.py
+│   ├── test_inventory.py
+│   ├── test_purchasing.py
+│   └── fixtures/
+│       └── sample_data.json
+├── data/
+│   ├── database.sqlite
+│   ├── default_config.json
+│   └── exports/
+├── requirements.txt
+├── README.md
+└── prd.md
 ```
 
 ---
 
-## Development Plan
+## 11. Implementation Phases
 
 ### Phase 1: Foundation (Week 1)
-**Goal:** Working API with basic CRUD, database models, and project scaffolding
+- [ ] Project structure setup
+- [ ] Database schema implementation
+- [ ] Basic Pydantic models
+- [ ] Configuration loading
 
-| Task | Deliverable | Est. Days |
-|------|-------------|-----------|
-| Setup project structure | Initialized repo with folder layout, requirements | 0.5 |
-| Database models | SQLAlchemy models for Printer, Job, Spool | 1 |
-| API skeleton | FastAPI app, dependency injection, error handling | 0.5 |
-| Printer CRUD endpoints | Full Create/Read/Update/Delete for printers | 1 |
-| Job CRUD endpoints | Full Create/Read/Update/Delete for jobs | 1 |
-| Material CRUD endpoints | Full Create/Read/Update/Delete for spools | 1 |
-| Unit tests | >80% coverage on models and services | 1 |
+### Phase 2: Core Simulation (Week 2)
+- [ ] SimPy integration
+- [ ] Demand generation
+- [ ] BOM calculation
+- [ ] Material consumption
 
-**Milestone 1:** Basic API operational, can create/print jobs manually
+### Phase 3: Business Logic (Week 3)
+- [ ] Manufacturing order management
+- [ ] Purchase order flow
+- [ ] Inventory tracking
+- [ ] Event logging
 
----
+### Phase 4: API Layer (Week 4)
+- [ ] REST endpoint implementation
+- [ ] Request/response validation
+- [ ] Error handling
+- [ ] OpenAPI documentation
 
-### Phase 2: Simulation Core (Week 2)
-**Goal:** SimPy-based simulation engine driving printer states
+### Phase 5: UI Development (Week 5)
+- [ ] Streamlit dashboard layout
+- [ ] Component integration
+- [ ] Chart visualization
+- [ ] Real-time updates
 
-| Task | Deliverable | Est. Days |
-|------|-------------|-----------|
-| SimPy environment setup | Simulation core with time control | 0.5 |
-| Printer simulation process | State machine (idle→printing→completed/error) | 1.5 |
-| Job processing logic | Queue assignment, priority handling | 1 |
-| Failure injection system | Random/manual failure generation | 1 |
-| Progress tracking | Real-time progress percentage updates | 0.5 |
-| Integration with API | Connect sim events to API state | 0.5 |
-| Tests for simulation | Deterministic test scenarios | 1 |
-
-**Milestone 2:** Simulation running independently, printers transition states realistically
-
----
-
-### Phase 3: Dashboard MVP (Week 3)
-**Goal:** Streamlit UI for monitoring and basic interaction
-
-| Task | Deliverable | Est. Days |
-|------|-------------|-----------|
-| Dashboard scaffold | Streamlit app with navigation | 0.5 |
-| Overview page | Farm status grid, quick stats | 1 |
-| Printer detail page | Individual printer view + controls | 1 |
-| Job queue page | Table with filtering/sorting | 1 |
-| Real-time polling/updates | Auto-refresh mechanism | 0.5 |
-| Styling/theming | Consistent visual design | 0.5 |
-
-**Milestone 3:** Users can monitor simulation progress via UI
+### Phase 6: Polish & Testing (Week 6)
+- [ ] Import/Export functionality
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Documentation
 
 ---
 
-### Phase 4: Advanced Features (Week 4)
-**Goal:** Materials, analytics, and simulation controls
+## 12. Risk Assessment
 
-| Task | Deliverable | Est. Days |
-|------|-------------|-----------|
-| Material consumption logic | Track filament usage per job | 1 |
-| Materials dashboard page | Spool inventory view | 1 |
-| Analytics API endpoints | Aggregation queries | 1 |
-| Analytics dashboard page | Charts and reports | 1 |
-| Simulation controls UI | Speed, start/stop, scenarios | 0.5 |
-| Failure injection UI | Manual trigger interface | 0.5 |
-
-**Milestone 4:** Feature-complete simulator
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| SimPy complexity | Medium | Low | Use simplified turn-based if needed |
+| State consistency | High | Medium | Transaction wrapping, rollback on error |
+| UI performance | Low | Low | Streamlit caching, pagination |
+| Data migration | Low | Low | JSON schema versioning |
 
 ---
 
-### Phase 5: Polish & Documentation (Week 5)
-**Goal:** Production-ready quality
+## 13. Assumptions & Dependencies
 
-| Task | Deliverable | Est. Days |
-|------|-------------|-----------|
-| Integration tests | End-to-end workflow tests | 1 |
-| Performance optimization | Handle 100+ concurrent printers | 1 |
-| Error handling polish | User-friendly messages, logging | 0.5 |
-| API documentation | Swagger refinement, examples | 0.5 |
-| README & setup guide | Quickstart for new users | 0.5 |
-| Sample data/scenarios | Pre-loaded demo content | 0.5 |
-| Final review & refactor | Code quality pass | 1 |
+### Assumptions
+- Single production line with fixed capacity
+- Instantaneous order release decision
+- Fixed supplier lead times (no variability)
+- No production defects/scrap
+- Infinite warehouse capacity (simplified constraint)
 
-**Milestone 5:** Release v1.0
-
----
-
-## Risks & Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| SimPy learning curve | Medium | Spike study in Week 1, use example scenarios |
-| Streamlit real-time performance | Medium | Implement efficient polling, consider WebSockets if needed |
-| Simulation accuracy expectations | High | Document assumptions, make parameters configurable |
-| Scope creep (additional features) | Medium | Stick to MVP scope, backlog non-critical items |
+### Dependencies
+- Python 3.11+ installed
+- SQLite (included with Python)
+- External packages via requirements.txt
 
 ---
 
-## Open Questions / TODOs
-
-- [ ] Confirm expected scale: How many printers should be simulatable? (affects DB choice)
-- [ ] Define failure scenarios in detail (what percentages, what recovery?)
-- [ ] Should G-code files be parsed or is metadata enough?
-- [ ] Multi-user support? Or single-session simulator?
-- [ ] Export capabilities needed? (CSV reports, PDF summaries)
-- [ ] Authentication required for API/dashboard?
-
----
-
-## Glossary
+## 14. Glossary
 
 | Term | Definition |
 |------|------------|
-| **SimPy** | Python library for discrete-event simulation |
-| **Discrete-event simulation** | System modeled as sequence of events at specific times |
-| **Spool** | A roll of 3D printing filament |
-| **G-code** | Instructions sent to 3D printer for execution |
-| **Utilization** | Percentage of time printer spends actively printing |
+| BOM | Bill of Materials - raw components needed to produce a finished product |
+| Lead Time | Days between purchase order placement and material arrival |
+| Manufacturing Order | Customer demand for a specific quantity of finished goods |
+| Purchase Order | Request to supplier for materials to replenish inventory |
+| SimDay | A single iteration of the simulation cycle |
+| Stockout | Situation where inventory reaches zero while demand exists |
 
 ---
 
-*Document Version: 1.0 Draft*
-*Created: 2026-03-26*
-*Author: AI Assistant*
-*Status: Pending Review*
+## 15. Approval
+
+| Role | Name | Date | Signature |
+|------|------|------|-----------|
+| Project Owner | ________________ | ________ | _________ |
+| Technical Lead | ________________ | ________ | _________ |
+| QA Lead | ________________ | ________ | _________ |
