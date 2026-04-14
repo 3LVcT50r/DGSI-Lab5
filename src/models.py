@@ -122,3 +122,16 @@ class Event(Base):
     type = Column(SAEnum(EventType), nullable=False)
     sim_date = Column(DateTime, default=datetime.utcnow)
     detail = Column(JSON, nullable=False)
+
+
+class DailyMetrics(Base):
+    __tablename__ = "daily_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    day = Column(Integer, nullable=False, unique=True)
+    total_inventory = Column(Integer, default=0)
+    pending_orders = Column(Integer, default=0)
+    completed_orders = Column(Integer, default=0)
+    open_purchase_orders = Column(Integer, default=0)
+    production_output = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)

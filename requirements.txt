@@ -1,23 +1,32 @@
 # Web Framework & API
-fastapi>=0.105.0
-uvicorn[standard]>=0.23.0
-python-multipart>=0.0.26
+fastapi>=0.105.0,<1.0.0
+uvicorn[standard]>=0.23.0,<1.0.0
+python-multipart>=0.0.26,<1.0.0
 
 # Database
-sqlalchemy>=2.0
+sqlalchemy>=2.0,<3.0
 
 # Data Validation & Settings
-pydantic>=2.6.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
+pydantic>=2.6.0,<3.0
+pydantic-settings>=2.0.0,<3.0
+python-dotenv>=1.0.0,<2.0
+
+# HTTP Client
+requests>=2.31.0,<3.0
 
 # UI
-streamlit>=1.30.0
+streamlit>=1.30.0,<2.0
+
+# Data Analysis & Visualization
+pandas>=2.0.0,<3.0
+matplotlib>=3.7.0,<4.0
+numpy>=2.1.0,<3.0
 
 # Testing
-pytest>=7.0.0
+pytest>=7.0.0,<8.0
+pytest-asyncio>=0.21.0,<1.0
 
-# Development (optional)
-black>=23.0.0
-isort>=5.12.0
-flake8>=6.0.0
+# Development Tools (optional)
+black>=23.0.0,<24.0
+isort>=5.12.0,<6.0
+flake8>=6.0.0,<7.0

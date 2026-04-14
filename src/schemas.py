@@ -91,3 +91,16 @@ class SimulationStatus(BaseModel):
     pending_orders: List[ManufacturingOrderRead]
     inventory_levels: List[InventoryRead]
     open_purchase_orders: List[PurchaseOrderRead]
+
+
+class DailyMetricsRead(BaseModel):
+    id: int
+    day: int
+    total_inventory: int
+    pending_orders: int
+    completed_orders: int
+    open_purchase_orders: int
+    production_output: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

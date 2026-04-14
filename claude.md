@@ -160,15 +160,18 @@ DGSI-Lab5/
 | Area | Status | Notes |
 |------|--------|-------|
 | PRD | ✅ Done | `prd.md` complete |
-| Project Setup | ⏳ Pending | Need to create requirements.txt, folder structure |
-| Database Schema | ⏳ Pending | Define SQLAlchemy models |
-| Configuration | ⏳ Pending | Default BOM, suppliers, demand params |
-| Simulation Engine | ⏳ Pending | SimPy or turn-based implementation |
-| API Layer | ⏳ Pending | REST endpoints |
-| UI Dashboard | ⏳ Pending | Streamlit interface |
-| Tests | ⏳ Pending | Unit + integration |
+| Project Setup | ✅ Done | Requirements.txt, folder structure, scripts de ejecución |
+| Database Schema | ✅ Done | SQLAlchemy models completos con todas las entidades |
+| Configuration | ✅ Done | Default BOM, suppliers, demand params en JSON |
+| Simulation Engine | ✅ **Implemented** | Lógica de simulación básica funcionando (carga inicial, estado, advance day) |
+| API Layer | ✅ **Implemented** | Endpoints REST completos con datos reales |
+| UI Dashboard | ✅ **Implemented** | Streamlit conectada al backend con funcionalidades completas |
+| Tests | ⚠️ Basic | Tests básicos funcionando, faltan tests de integración |
+| Charts & Historical Data | ✅ **Implemented** | Dashboard completo con 5 pestañas de gráficos y métricas históricas |
 
-**Next Up:** Initialize project structure with `requirements.txt` and base folders. Then implement database models matching the schema in PRD.
+**Next Up:** Implementar import/export de estado JSON y agregar manejo de errores avanzado.
+
+**Next Up:** Refinar la lógica de simulación (capacidad de producción, demanda realista) y agregar export/import de estado.
 
 ## Example Production Plan
 
