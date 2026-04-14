@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from src.api.routes import api_router
 from src.config import Settings
-from src.database import engine
+from src.database import engine, SessionLocal
 import src.models as models
+from src.services.seed import seed_database_from_config
 
 settings = Settings()
 
@@ -12,6 +14,18 @@ settings = Settings()
 async def lifespan(app: FastAPI):
     # Startup
     models.Base.metadata.create_all(bind=engine)
+
+    # Initialize database with seed data
+    db = SessionLocal()
+    try:
+        seed_database_from_config(db, str(settings.default_config_path))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error seeding database: {e}")
+    finally:
+        db.close()
+
     yield
     # Shutdown
     pass
@@ -32,18 +46,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-
-
-@app.on_event("startup")
-def startup_event():
-    models.Base.metadata.create_all(bind=engine)
-    
-    # Try to seed database from config file:
-    from src.services.seed import seed_database_from_config
-    from src.database import SessionLocal
-    
-    with SessionLocal() as session:
-        seed_database_from_config(session, str(settings.default_config_path))
 
 
 @app.get("/health")

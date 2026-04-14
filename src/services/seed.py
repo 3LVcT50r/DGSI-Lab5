@@ -18,25 +18,25 @@ logger = logging.getLogger(__name__)
 
 def seed_database_from_config(session: Session, config_path: str):
     """Seed the database with parts, BOM, suppliers and state using default config."""
-    # Check if DB is already seeded:
     if session.query(SimulationState).first():
         logger.info("Database already seeded. Skipping seed process.")
         return
 
     logger.info(f"Seeding database from config: {config_path}")
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config_data = json.load(f)
 
     # 1. Initialize SimulationState
     state = SimulationState(current_day=0)
     session.add(state)
 
-    # Collect materials and models to create Products
+    # Collect unique material names only for numeric BOM entries
     material_names = set()
-    for model_name, model_info in config_data.get("models", {}).items():
-        for mat_name in model_info.get("bom", {}).keys():
-            material_names.add(mat_name)
-    
+    for model_info in config_data.get("models", {}).values():
+        for mat_name, qty in model_info.get("bom", {}).items():
+            if isinstance(qty, (int, float)):
+                material_names.add(mat_name)
+
     for supp in config_data.get("suppliers", []):
         for prod in supp.get("products", []):
             material_names.add(prod["product"])
@@ -44,27 +44,39 @@ def seed_database_from_config(session: Session, config_path: str):
     products_cache = {}
 
     # 2. Create raw materials
-    for mat_name in material_names:
+    for mat_name in sorted(material_names):
+        existing = session.query(Product).filter_by(name=mat_name).first()
+        if existing:
+            products_cache[mat_name] = existing
+            continue
+
         mat_prod = Product(name=mat_name, type=ProductType.RAW)
         session.add(mat_prod)
+        session.flush()
         products_cache[mat_name] = mat_prod
 
     # 3. Create finished goods and their BOM
     for model_name, model_info in config_data.get("models", {}).items():
-        fin_prod = Product(name=model_name, type=ProductType.FINISHED)
-        session.add(fin_prod)
+        existing = session.query(Product).filter_by(name=model_name).first()
+        if existing:
+            fin_prod = existing
+        else:
+            fin_prod = Product(name=model_name, type=ProductType.FINISHED)
+            session.add(fin_prod)
+            session.flush()
+
         products_cache[model_name] = fin_prod
 
-    session.flush()
-
-    for model_name, model_info in config_data.get("models", {}).items():
-        fin_prod = products_cache[model_name]
         for mat_name, qty in model_info.get("bom", {}).items():
             if not isinstance(qty, (int, float)):
                 logger.info(f"Skipping non-numeric BOM item: {mat_name} = {qty}")
                 continue
-            
-            mat_prod = products_cache[mat_name]
+
+            mat_prod = products_cache.get(mat_name)
+            if not mat_prod:
+                logger.warning(f"BOM material '{mat_name}' not found in cache; skipping.")
+                continue
+
             bom_item = BOM(
                 finished_product_id=fin_prod.id,
                 material_id=mat_prod.id,
@@ -76,18 +88,25 @@ def seed_database_from_config(session: Session, config_path: str):
     for supp_info in config_data.get("suppliers", []):
         for prod_info in supp_info.get("products", []):
             product_name = prod_info["product"]
-            if product_name in products_cache:
-                supplier = Supplier(
-                    name=supp_info["name"],
-                    product_id=products_cache[product_name].id,
-                    unit_cost=prod_info["price_per_unit"],
-                    lead_time_days=prod_info["lead_time_days"],
-                    min_order_qty=prod_info.get("min_order_qty", 1)
-                )
-                session.add(supplier)
+            product_obj = products_cache.get(product_name)
+            if not product_obj:
+                logger.warning(f"Supplier product '{product_name}' not found; skipping supplier entry.")
+                continue
+
+            supplier = Supplier(
+                name=supp_info["name"],
+                product_id=product_obj.id,
+                unit_cost=prod_info["price_per_unit"],
+                lead_time_days=prod_info["lead_time_days"],
+                min_order_qty=prod_info.get("min_order_qty", 1)
+            )
+            session.add(supplier)
 
     # 5. Create Inventory records at 0 for all products
-    for prod in products_cache.values():
+    session.flush()
+    for prod in session.query(Product).all():
+        if session.query(Inventory).filter_by(product_id=prod.id).first():
+            continue
         inv = Inventory(
             product_id=prod.id,
             quantity=0,
