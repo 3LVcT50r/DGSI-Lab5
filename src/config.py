@@ -1,15 +1,20 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="3D Printer Factory Simulator")
-    version: str = Field(default="0.1.0")
-    database_url: str = Field(default="sqlite:///./data/database.sqlite")
-    default_config_path: Path = Field(default=Path("data/default_config.json"))
-    warehouse_capacity: int = Field(default=500)
-    production_capacity_per_day: int = Field(default=10)
-    demand_seed: int = Field(default=1234)
+    """Application settings loaded from environment variables and .env file."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    app_name: str = "3D Printer Factory Simulator"
+    version: str = "0.1.0"
+    database_url: str = "sqlite:///./data/database.sqlite"
+    default_config_path: Path = Path("data/default_config.json")
+    warehouse_capacity: int = 500
+    production_capacity_per_day: int = 10
+    demand_seed: int | None = None
+
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+    }

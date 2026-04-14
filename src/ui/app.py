@@ -1,252 +1,159 @@
-import sys
-from pathlib import Path
-
 import streamlit as st
 import requests
 import pandas as pd
+import matplotlib.pyplot as plt
 
-# Ensure the ui package path is on sys.path when Streamlit runs app.py directly
-BASE_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(BASE_DIR))
+API_URL = "http://localhost:8000/api/v1"
 
-from charts import (
-    create_inventory_chart,
-    create_orders_status_chart,
-    create_purchase_orders_timeline,
-    create_daily_production_chart,
-    create_inventory_trend_chart,
-    create_orders_trend_chart
-)
+st.set_page_config(page_title="3D Printer Factory Simulator", layout="wide")
 
+def fetch_data(endpoint: str):
+    try:
+        response = requests.get(f"{API_URL}/{endpoint}")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Error fetching {endpoint}: {e}")
+        return None
 
-def main():
-    st.set_page_config(
-        page_title="3D Printer Factory Simulator",
-        page_icon="🏭",
-        layout="wide"
-    )
+def post_data(endpoint: str, json_data=None):
+    try:
+        response = requests.post(f"{API_URL}/{endpoint}", json=json_data)
+        response.raise_for_status()
+        st.success(f"Success: {endpoint}")
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        error_msg = e.response.json().get("detail", str(e))
+        st.error(f"Error: {error_msg}")
+        return None
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
 
-    st.title("🏭 3D Printer Factory Simulator")
-    st.markdown("---")
+def refresh():
+    st.rerun()
 
-    # API base URL
-    API_BASE = "http://localhost:8000/api/v1"
+st.title("🏭 3D Printer Factory Simulation")
 
-    # Sidebar controls
-    with st.sidebar:
-        st.header("Simulation Controls")
+# Fetch overall status and mapping
+status = fetch_data("simulate/status")
+products = fetch_data("products")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("▶️ Advance Day", type="primary"):
-                try:
-                    response = requests.post(f"{API_BASE}/simulate/advance")
-                    if response.status_code == 200:
-                        st.success("Day advanced!")
-                        st.rerun()
-                    else:
-                        st.error(f"Error: {response.text}")
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
+if status is None or products is None:
+    st.warning("Cannot connect to backend. Is FastAPI running on port 8000?")
+    st.stop()
 
-        with col2:
-            if st.button("🔄 Reset", type="secondary"):
-                try:
-                    response = requests.post(f"{API_BASE}/simulate/reset")
-                    if response.status_code == 200:
-                        st.success("Simulation reset!")
-                        st.rerun()
-                    else:
-                        st.error(f"Error: {response.text}")
-                except Exception as e:
-                    st.error(f"Connection error: {e}")
+# Build Product Map { id -> name }
+product_map = {p["id"]: p["name"] for p in products}
 
-        st.markdown("---")
+current_day = status.get("current_day", 0)
 
-        # Current simulation status
-        try:
-            status_response = requests.get(f"{API_BASE}/simulate/status")
-            if status_response.status_code == 200:
-                status = status_response.json()
-                st.metric("Current Day", status.get("current_day", 0))
-                st.metric("Total Events", status.get("total_events", 0))
-            else:
-                st.error("Unable to fetch simulation status")
-        except Exception as e:
-            st.error(f"Connection error: {e}")
+# Sidebar Controls
+st.sidebar.header(f"📅 Day: {current_day}")
 
-    # Main content tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Overview",
-        "📦 Inventory",
-        "📋 Orders",
-        "🚚 Purchase Orders",
-        "📈 Historical Trends"
-    ])
+if st.sidebar.button("▶️ Advance Day"):
+    post_data("simulate/advance")
+    refresh()
 
-    # Overview Tab
-    with tab1:
-        st.header("Factory Overview")
+if st.sidebar.button("🔄 Reset Simulation"):
+    post_data("simulate/reset")
+    refresh()
 
-        try:
-            # Get current status
-            status_response = requests.get(f"{API_BASE}/simulate/status")
-            if status_response.status_code == 200:
-                status = status_response.json()
+st.sidebar.markdown("---")
+st.sidebar.header("Purchasing (Raw Materials)")
 
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Current Day", status.get("current_day", 0))
-                with col2:
-                    st.metric("Total Events", status.get("total_events", 0))
-                with col3:
-                    st.metric("Active Orders", status.get("active_orders", 0))
-                with col4:
-                    st.metric("Pending POs", status.get("pending_pos", 0))
+suppliers = fetch_data("suppliers")
+if suppliers:
+    unique_supp_names = list(set([s["name"] for s in suppliers]))
+    selected_supp_name = st.sidebar.selectbox("Supplier Name", unique_supp_names)
+    
+    supp_items = [s for s in suppliers if s["name"] == selected_supp_name]
+    
+    item_options = {f"{product_map.get(s['product_id'], 'Unknown')} (${s['unit_cost']})": s for s in supp_items}
+    selected_item_label = st.sidebar.selectbox("Product", list(item_options.keys()))
+    selected_item = item_options[selected_item_label]
+    
+    min_qty = selected_item.get("min_order_qty", 1)
+    qty = st.sidebar.number_input("Quantity", min_value=min_qty, value=min_qty, step=1)
+    
+    if st.sidebar.button("Issue PO"):
+        post_data("purchase-orders", {
+            "supplier_id": selected_item["id"],
+            "product_id": selected_item["product_id"],
+            "quantity": qty
+        })
+        refresh()
 
-                # Recent events
-                st.subheader("Recent Events")
-                events = status.get("recent_events", [])
-                if events:
-                    for event in events[-5:]:  # Show last 5 events
-                        st.write(f"**Day {event['sim_date']}**: {event['type']} - {event['details']}")
-                else:
-                    st.info("No events yet. Advance a day to start simulation.")
+# --- Main Layout ---
+col1, col2 = st.columns(2)
 
-        except Exception as e:
-            st.error(f"Unable to fetch overview data: {e}")
+with col1:
+    st.markdown("### 📋 Pending Manufacturing Orders")
+    pending_orders = status.get("pending_orders", [])
+    if pending_orders:
+        df_orders = pd.DataFrame(pending_orders)
+        df_orders["Product"] = df_orders["product_id"].map(product_map)
+        
+        # Display selected orders for manual release
+        selected_order_id = st.selectbox("Select Pending Order to Release Manually", df_orders["id"].tolist())
+        if st.button("Release Selected Order"):
+            post_data(f"orders/{selected_order_id}/release")
+            refresh()
+            
+        st.dataframe(df_orders[["id", "Product", "quantity", "created_date", "status"]], use_container_width=True)
+    else:
+        st.info("No pending orders.")
 
-    # Inventory Tab
-    with tab2:
-        st.header("Inventory Management")
+    st.markdown("### 🛠 Open Purchase Orders")
+    open_pos = status.get("open_purchase_orders", [])
+    if open_pos:
+        df_pos = pd.DataFrame(open_pos)
+        df_pos["Product"] = df_pos["product_id"].map(product_map)
+        st.dataframe(df_pos[["id", "Product", "quantity", "expected_delivery", "status"]], use_container_width=True)
+    else:
+        st.info("No open purchase orders.")
 
-        try:
-            # Get inventory data
-            inventory_response = requests.get(f"{API_BASE}/inventory")
-            if inventory_response.status_code == 200:
-                inventory_data = inventory_response.json()
+with col2:
+    st.markdown("### 📦 Inventory Levels")
+    inventory_levels = status.get("inventory_levels", [])
+    if inventory_levels:
+        df_inv = pd.DataFrame(inventory_levels)
+        df_inv["Product"] = df_inv["product_id"].map(product_map)
+        
+        # format columns
+        df_inv_viz = df_inv[["Product", "quantity", "reserved"]]
+        
+        st.dataframe(df_inv_viz.style.map(lambda v: 'background-color: #ffcccc' if float(v) < 5 else '', subset=['quantity']), use_container_width=True)
+    else:
+        st.info("No inventory data.")
 
-                # Data table
-                if inventory_data:
-                    df = pd.DataFrame(inventory_data)
-                    st.dataframe(df, use_container_width=True)
+    st.markdown("### 📊 Factory Events")
+    events = fetch_data("events")
+    if events:
+        df_events = pd.DataFrame(events)
+        st.dataframe(df_events[["sim_date", "type", "details"]], use_container_width=True)
+    else:
+        st.info("No events logged yet.")
 
-                    # Chart
-                    fig = create_inventory_chart(inventory_data)
-                    if fig:
-                        st.pyplot(fig)
-                else:
-                    st.info("No inventory data available.")
+# Charts
+st.markdown("---")
+st.markdown("### 📈 Charts")
 
-        except Exception as e:
-            st.error(f"Unable to fetch inventory data: {e}")
-
-    # Orders Tab
-    with tab3:
-        st.header("Manufacturing Orders")
-
-        try:
-            # Get orders data
-            orders_response = requests.get(f"{API_BASE}/orders")
-            if orders_response.status_code == 200:
-                orders_data = orders_response.json()
-
-                if orders_data:
-                    df = pd.DataFrame(orders_data)
-                    st.dataframe(df, use_container_width=True)
-
-                    # Status chart
-                    fig = create_orders_status_chart(orders_data)
-                    if fig:
-                        st.pyplot(fig)
-                else:
-                    st.info("No orders data available.")
-
-        except Exception as e:
-            st.error(f"Unable to fetch orders data: {e}")
-
-    # Purchase Orders Tab
-    with tab4:
-        st.header("Purchase Orders")
-
-        try:
-            # Get suppliers first for context
-            suppliers_response = requests.get(f"{API_BASE}/suppliers")
-            suppliers = {}
-            if suppliers_response.status_code == 200:
-                for supplier in suppliers_response.json():
-                    suppliers[supplier['id']] = supplier['name']
-
-            # Get PO data
-            po_response = requests.get(f"{API_BASE}/purchase-orders")
-            if po_response.status_code == 200:
-                po_data = po_response.json()
-
-                if po_data:
-                    # Add supplier names
-                    for po in po_data:
-                        po['supplier_name'] = suppliers.get(po['supplier_id'], 'Unknown')
-
-                    df = pd.DataFrame(po_data)
-                    st.dataframe(df, use_container_width=True)
-
-                    # Timeline chart
-                    fig = create_purchase_orders_timeline(po_data)
-                    if fig:
-                        st.pyplot(fig)
-                else:
-                    st.info("No purchase orders data available.")
-
-        except Exception as e:
-            st.error(f"Unable to fetch purchase orders data: {e}")
-
-    # Historical Trends Tab
-    with tab5:
-        st.header("Historical Trends")
-
-        try:
-            # Get historical metrics
-            metrics_response = requests.get(f"{API_BASE}/metrics/history")
-            if metrics_response.status_code == 200:
-                metrics_data = metrics_response.json()
-
-                if metrics_data and len(metrics_data) > 1:
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        st.subheader("Daily Production")
-                        fig_prod = create_daily_production_chart(metrics_data)
-                        if fig_prod:
-                            st.pyplot(fig_prod)
-
-                        st.subheader("Inventory Trends")
-                        fig_inv = create_inventory_trend_chart(metrics_data)
-                        if fig_inv:
-                            st.pyplot(fig_inv)
-
-                    with col2:
-                        st.subheader("Orders Trend")
-                        fig_orders = create_orders_trend_chart(metrics_data)
-                        if fig_orders:
-                            st.pyplot(fig_orders)
-
-                    # Raw data table
-                    st.subheader("Historical Data")
-                    df = pd.DataFrame(metrics_data)
-                    st.dataframe(df, use_container_width=True)
-
-                else:
-                    st.info("Not enough historical data yet. Advance several days to see trends.")
-
-                    # Show mock charts for demonstration
-                    st.subheader("Sample Charts (Mock Data)")
-                    fig_prod = create_daily_production_chart()
-                    if fig_prod:
-                        st.pyplot(fig_prod)
-
-        except Exception as e:
-            st.error(f"Unable to fetch historical data: {e}")
-
-
-if __name__ == "__main__":
-    main()
+if events:
+    df_events = pd.DataFrame(events)
+    completions = df_events[df_events["type"] == "order_completed"]
+    if not completions.empty:
+        qty_extract = completions["details"].apply(lambda x: x.get("qty", 0))
+        completions = completions.assign(completed_qty=qty_extract)
+        
+        daily_completions = completions.groupby("sim_date")["completed_qty"].sum().reset_index()
+        daily_completions["cumulative"] = daily_completions["completed_qty"].cumsum()
+        
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(daily_completions["sim_date"], daily_completions["cumulative"], marker="o", color="blue")
+        ax.set_title("Cumulative Finished Orders")
+        ax.set_xlabel("Simulation Day")
+        ax.set_ylabel("Total Models Built")
+        st.pyplot(fig)
+    else:
+        st.info("No completed orders yet to chart.")

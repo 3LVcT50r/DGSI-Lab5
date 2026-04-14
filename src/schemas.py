@@ -1,13 +1,23 @@
-from datetime import datetime
+"""Pydantic schemas (DTOs) for request validation and response serialisation."""
+
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, ConfigDict
 
+
+# ---------------------------------------------------------------------------
+# Enumerations (mirrored for API layer)
+# ---------------------------------------------------------------------------
 
 class ProductType(str, Enum):
     raw = "raw"
     finished = "finished"
 
+
+# ---------------------------------------------------------------------------
+# Product
+# ---------------------------------------------------------------------------
 
 class ProductBase(BaseModel):
     name: str
@@ -20,34 +30,58 @@ class ProductCreate(ProductBase):
 
 class ProductRead(ProductBase):
     id: int
-
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------------------------------------------------------------------------
+# BOM
+# ---------------------------------------------------------------------------
+
 class BOMItem(BaseModel):
     material_id: int
-    quantity: int
+    quantity: float
+    model_config = ConfigDict(from_attributes=True)
 
+
+class BOMRead(BaseModel):
+    id: int
+    finished_product_id: int
+    material_id: int
+    quantity: float
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Supplier
+# ---------------------------------------------------------------------------
 
 class SupplierBase(BaseModel):
     name: str
     product_id: int
     unit_cost: float
     lead_time_days: int
+    min_order_qty: int = 1
 
 
 class SupplierRead(SupplierBase):
     id: int
-
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------------------------------------------------------
+# Inventory
+# ---------------------------------------------------------------------------
 
 class InventoryRead(BaseModel):
     product_id: int
-    quantity: int
-
+    quantity: float
+    reserved: float = 0
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------------------------------------------------------
+# Manufacturing Order
+# ---------------------------------------------------------------------------
 
 class ManufacturingOrderBase(BaseModel):
     product_id: int
@@ -56,51 +90,52 @@ class ManufacturingOrderBase(BaseModel):
 
 class ManufacturingOrderRead(ManufacturingOrderBase):
     id: int
-    created_date: datetime
+    created_date: int
     status: str
-
+    start_date: Optional[int] = None
+    completed_date: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 
-class PurchaseOrderBase(BaseModel):
+# ---------------------------------------------------------------------------
+# Purchase Order
+# ---------------------------------------------------------------------------
+
+class PurchaseOrderCreate(BaseModel):
     supplier_id: int
     product_id: int
     quantity: int
-    expected_delivery: datetime
 
 
-class PurchaseOrderRead(PurchaseOrderBase):
+class PurchaseOrderRead(BaseModel):
     id: int
-    issue_date: datetime
+    supplier_id: int
+    product_id: int
+    quantity: int
+    issue_date: int
+    expected_delivery: int
     status: str
-
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------------------------------------------------------
+# Event
+# ---------------------------------------------------------------------------
 
 class EventRead(BaseModel):
     id: int
     type: str
-    sim_date: datetime
-    detail: Dict[str, object]
-
+    sim_date: int
+    details: Dict[str, Any]
     model_config = ConfigDict(from_attributes=True)
 
+
+# ---------------------------------------------------------------------------
+# Simulation Status (composite)
+# ---------------------------------------------------------------------------
 
 class SimulationStatus(BaseModel):
     current_day: int
     pending_orders: List[ManufacturingOrderRead]
     inventory_levels: List[InventoryRead]
     open_purchase_orders: List[PurchaseOrderRead]
-
-
-class DailyMetricsRead(BaseModel):
-    id: int
-    day: int
-    total_inventory: int
-    pending_orders: int
-    completed_orders: int
-    open_purchase_orders: int
-    production_output: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)

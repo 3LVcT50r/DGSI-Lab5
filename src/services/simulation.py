@@ -1,342 +1,290 @@
-from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
+import json
+import logging
+import random
+from datetime import datetime
 from typing import Any, Dict, List
-from src.schemas import SimulationStatus, PurchaseOrderRead, ManufacturingOrderRead, EventRead
-from src.models import ManufacturingOrder, PurchaseOrder, OrderStatus, PurchaseOrderStatus, Event, EventType
-from src.services.inventory import get_inventory_levels
-from src.services.initialization import load_initial_data, clear_all_data
-from src.services.metrics import record_daily_metrics
+
+from sqlalchemy.orm import Session
+from src.config import Settings
+from src.models import (
+    SimulationState,
+    ManufacturingOrder,
+    OrderStatus,
+    PurchaseOrder,
+    PurchaseOrderStatus,
+    Product,
+    ProductType,
+    Event,
+    EventType,
+)
+from src.schemas import (
+    SimulationStatus,
+    PurchaseOrderRead,
+    ManufacturingOrderRead,
+    InventoryRead,
+)
+from src.services.inventory import (
+    reserve_materials,
+    consume_materials,
+    receive_purchase_order,
+    get_inventory_levels,
+)
+
+logger = logging.getLogger(__name__)
 
 
-# Global simulation state (in a real app, this would be in database or cache)
-_simulation_day = 0
+def log_event(session: Session, event_type: EventType, sim_date: int, details: Dict[str, Any]):
+    """Helper to write to the event log."""
+    evt = Event(type=event_type, sim_date=sim_date, details=details)
+    session.add(evt)
 
 
-def get_current_day() -> int:
-    """Get current simulation day."""
-    global _simulation_day
-    return _simulation_day
+def get_current_day(session: Session) -> int:
+    state = session.query(SimulationState).first()
+    return state.current_day if state else 0
 
 
-def set_current_day(day: int) -> None:
-    """Set current simulation day."""
-    global _simulation_day
-    _simulation_day = day
+def generate_demand(session: Session, day: int, settings: Settings):
+    """Generate daily manufacturing orders based on gaussian distribution config."""
+    seed_val = settings.demand_seed
+    if seed_val is not None:
+        random.seed(f"{seed_val}_{day}")
+
+    with open(settings.default_config_path, "r") as f:
+        config = json.load(f)
+    
+    # Generate orders for each finished product
+    finished_products = session.query(Product).filter(Product.type == ProductType.FINISHED).all()
+    for prod in finished_products:
+        # get model specific mean/variance or defaults
+        models_cfg = config.get("models", {})
+        prod_cfg = models_cfg.get(prod.name, {})
+        
+        mean = prod_cfg.get("demand_mean", config.get("default_mean", 5))
+        variance = prod_cfg.get("demand_variance", config.get("default_variance", 2.0))
+        std_dev = variance ** 0.5
+        
+        # Normal distribution, truncated at 0
+        demand_qty = int(round(random.gauss(mean, std_dev)))
+        if demand_qty < 0:
+            demand_qty = 0
+            
+        if demand_qty > 0:
+            mo = ManufacturingOrder(
+                created_date=day,
+                product_id=prod.id,
+                quantity=demand_qty,
+                status=OrderStatus.PENDING
+            )
+            session.add(mo)
+            session.flush()
+            log_event(session, EventType.ORDER_CREATED, day, {"order_id": mo.id, "product": prod.name, "qty": demand_qty})
 
 
 def advance_day(session: Session) -> Dict[str, Any]:
-    """Advance the simulation one day and process daily events."""
-    global _simulation_day
-    _simulation_day += 1
+    """Advance the simulation calendar by one day and process daily events."""
+    settings = Settings()
+    state = session.query(SimulationState).with_for_update().first()
+    if not state:
+        raise ValueError("Simulation state not initialized. Is seed process run?")
+    
+    # 1. Update day counter
+    state.current_day += 1
+    today = state.current_day
+    
+    with open(settings.default_config_path, "r") as f:
+        config = json.load(f)
+    
+    capacity_per_day = config.get("capacity_per_day", settings.production_capacity_per_day)
 
-    events = []
+    # 2. Process purchase arrivals (expected_delivery <= today)
+    arriving_pos = session.query(PurchaseOrder).filter(
+        PurchaseOrder.status == PurchaseOrderStatus.OPEN,
+        PurchaseOrder.expected_delivery <= today
+    ).with_for_update().all()
+    
+    for po in arriving_pos:
+        receive_purchase_order(session, po.product_id, po.quantity)
+        po.status = PurchaseOrderStatus.RECEIVED
+        log_event(session, EventType.PO_RECEIVED, today, {
+            "po_id": po.id, 
+            "product_id": po.product_id, 
+            "qty": po.quantity
+        })
 
-    # 1. Generate new manufacturing orders (simplified - random demand)
-    new_orders = _generate_demand(session)
-    events.extend(new_orders)
+    # 3. Complete in-progress production
+    in_progress = session.query(ManufacturingOrder).filter(
+        ManufacturingOrder.status == OrderStatus.IN_PROGRESS
+    ).with_for_update().all()
 
-    # 2. Process purchase order arrivals
-    arrived_pos = _process_purchase_arrivals(session)
-    events.extend(arrived_pos)
+    # We assume an order takes X hours but max 1 day cycle, so any IN_PROGRESS from yesterday is completed today.
+    # Note: PRD says "Assembly Time per model" but also "Daily capacity: Max units producible per day".
+    # We will enforce the capacity bottleneck.
+    completed_qty = 0
+    for mo in in_progress:
+        # Check if completing this order exceeds daily capacity
+        # (Assuming they were started safely up to the capacity limit, but let's complete them all)
+        mo.status = OrderStatus.COMPLETED
+        mo.completed_date = today
+        completed_qty += mo.quantity
+        log_event(session, EventType.ORDER_COMPLETED, today, {"order_id": mo.id, "qty": mo.quantity})
+        
+        # Create stockout events if any demand isn't met? No, PRD says stockout happens when
+        # materials reach zero. That's implicitly logged during reservation attempt failures later.
 
-    # 3. Complete in-progress production orders
-    completed_orders = _complete_production_orders(session)
-    events.extend(completed_orders)
+    # 4. Consume materials & Start new orders (up to remaining daily capacity)
+    # We evaluate both totally new PENDING and those that were blocked before.
+    pending = session.query(ManufacturingOrder).filter(
+        ManufacturingOrder.status.in_([OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS])
+    ).order_by(ManufacturingOrder.created_date.asc()).all()
 
-    # 4. Start new orders (up to daily capacity)
-    started_orders = _start_production_orders(session)
-    events.extend(started_orders)
+    started_qty_today = 0
+    for mo in pending:
+        if started_qty_today + mo.quantity > capacity_per_day:
+            continue # Exceeds capacity, wait for tomorrow
+        
+        # Try to reserve materials
+        success, missing_info = reserve_materials(session, mo.product_id, mo.quantity)
+        if success:
+            # Consume those reserved materials immediately since we are starting production
+            consume_materials(session, mo.product_id, mo.quantity)
+            
+            mo.status = OrderStatus.IN_PROGRESS
+            mo.start_date = today
+            started_qty_today += mo.quantity
+            log_event(session, EventType.MATERIALS_CONSUMED, today, {"order_id": mo.id, "qty": mo.quantity})
+            log_event(session, EventType.ORDER_STARTED, today, {"order_id": mo.id, "qty": mo.quantity})
+        else:
+            # Failed to start due to material constraint
+            mo.status = OrderStatus.WAITING_FOR_MATERIALS
+            log_event(session, EventType.STOCKOUT, today, {
+                "order_id": mo.id, 
+                "reason": "Insufficient materials",
+                "missing": missing_info
+            })
 
-    # Log the day advance
-    _log_event(session, EventType.ORDER_CREATED, {"action": "day_advanced", "new_day": _simulation_day})
-
-    # Record daily metrics
-    _record_daily_metrics(session, _simulation_day)
+    # 5. Generate demand for next simulation cycle
+    generate_demand(session, today, settings)
 
     session.commit()
-
-    return {
-        "new_day": _simulation_day,
-        "events_generated": len(events),
-        "events": events
-    }
+    return {"status": "advanced", "current_day": today}
 
 
 def get_simulation_status(session: Session) -> SimulationStatus:
     """Return current summary state for the dashboard and API."""
-    # Ensure initial data is loaded
-    load_initial_data(session)
-
-    pending_orders = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.PENDING
+    day = get_current_day(session)
+    
+    pending_mos = session.query(ManufacturingOrder).filter(
+        ManufacturingOrder.status.in_([OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS])
     ).all()
-
+    
     open_pos = session.query(PurchaseOrder).filter(
         PurchaseOrder.status == PurchaseOrderStatus.OPEN
     ).all()
-
-    inventory_levels = get_inventory_levels(session)
-
+    
+    inventory = get_inventory_levels(session)
+    
     return SimulationStatus(
-        current_day=get_current_day(),
-        pending_orders=[
-            ManufacturingOrderRead(
-                id=order.id,
-                product_id=order.product_id,
-                quantity=order.quantity,
-                created_date=order.created_date,
-                status=order.status.value
-            )
-            for order in pending_orders
-        ],
-        inventory_levels=inventory_levels,
-        open_purchase_orders=[
-            PurchaseOrderRead(
-                id=po.id,
-                supplier_id=po.supplier_id,
-                product_id=po.product_id,
-                quantity=po.quantity,
-                issue_date=po.issue_date,
-                expected_delivery=po.expected_delivery,
-                status=po.status.value
-            )
-            for po in open_pos
-        ]
+        current_day=day,
+        pending_orders=[ManufacturingOrderRead.model_validate(mo) for mo in pending_mos],
+        inventory_levels=inventory,
+        open_purchase_orders=[PurchaseOrderRead.model_validate(po) for po in open_pos]
     )
 
 
 def reset_simulation(session: Session) -> None:
-    """Reset the simulation state to initial values."""
-    global _simulation_day
-    _simulation_day = 0
-
-    clear_all_data(session)
-    load_initial_data(session)
-
-    # Log reset event
-    _log_event(session, EventType.ORDER_CREATED, {"action": "simulation_reset"})
+    """Reset the simulation state to initial values. Wipes DB and reseeds."""
+    from src.models import Base
+    from src.database import engine
+    from src.services.seed import seed_database_from_config
+    
+    # Drop and recreate tables
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    
+    # Reseed
+    settings = Settings()
+    seed_database_from_config(session, str(settings.default_config_path))
 
 
 def release_order(session: Session, order_id: int) -> ManufacturingOrderRead:
-    """Release a pending manufacturing order into production."""
-    order = session.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()
-    if not order:
-        raise ValueError(f"Order {order_id} not found")
-
-    if order.status != OrderStatus.PENDING:
-        raise ValueError(f"Order {order_id} is not pending")
-
-    # Check if materials are available
-    from src.services.inventory import reserve_materials
-    if not reserve_materials(session, order.product_id, order.quantity):
-        raise ValueError(f"Insufficient materials for order {order_id}")
-
-    # Change status to in_progress
-    order.status = OrderStatus.IN_PROGRESS
-    session.commit()
-
-    # Log event
-    _log_event(session, EventType.ORDER_RELEASED, {
-        "order_id": order_id,
-        "product_id": order.product_id,
-        "quantity": order.quantity
-    })
-
-    return ManufacturingOrderRead(
-        id=order.id,
-        product_id=order.product_id,
-        quantity=order.quantity,
-        created_date=order.created_date,
-        status=order.status.value
-    )
+    """Release a pending manufacturing order into production. 
+    It checks materials, reserves them, and changes state."""
+    mo = session.query(ManufacturingOrder).filter(ManufacturingOrder.id == order_id).first()
+    if not mo:
+        raise ValueError("Order not found.")
+    if mo.status not in [OrderStatus.PENDING, OrderStatus.WAITING_FOR_MATERIALS]:
+        raise ValueError(f"Order is in status {mo.status.value}, cannot release.")
+        
+    day = get_current_day(session)
+    success, missing_info = reserve_materials(session, mo.product_id, mo.quantity)
+    if success:
+        # We just reserve. The advance_day cycle will pick it up and consume.
+        # But wait, PRD says user manually releases. If they manually release, should it be IN_PROGRESS?
+        # A true manual release just means "approved for production".
+        # Let's say user manual release means we mark it as IN_PROGRESS immediately and consume materials,
+        # circumventing the auto-start for this specific UI action.
+        consume_materials(session, mo.product_id, mo.quantity)
+        mo.status = OrderStatus.IN_PROGRESS
+        mo.start_date = day
+        log_event(session, EventType.ORDER_RELEASED, day, {"order_id": mo.id})
+        log_event(session, EventType.MATERIALS_CONSUMED, day, {"order_id": mo.id, "qty": mo.quantity})
+        session.commit()
+        return ManufacturingOrderRead.model_validate(mo)
+    else:
+        raise ValueError(f"Insufficient materials to release order. Missing: {', '.join(missing_info)}")
 
 
-def create_purchase_order(session: Session, supplier_id: int, product_id: int, quantity: int, expected_delivery: datetime) -> PurchaseOrderRead:
+def create_purchase_order(session: Session, supplier_id: int, product_id: int, quantity: int, expected_delivery: int) -> PurchaseOrderRead:
     """Issue a purchase order for raw materials."""
     from src.models import Supplier
-
-    # Validate supplier exists and sells this product
-    supplier = session.query(Supplier).filter(
-        Supplier.id == supplier_id,
-        Supplier.product_id == product_id
-    ).first()
-
-    if not supplier:
-        raise ValueError(f"Supplier {supplier_id} does not sell product {product_id}")
-
-    # Create purchase order
+    supp = session.query(Supplier).filter(Supplier.id == supplier_id).first()
+    if not supp:
+        raise ValueError("Supplier not found.")
+    if quantity < supp.min_order_qty:
+        raise ValueError(f"Quantity {quantity} below minimum order quantity {supp.min_order_qty}")
+        
+    day = get_current_day(session)
+    
+    # override expected delivery intelligently: today + lead_time_days
+    actual_expected_delivery = day + supp.lead_time_days
+    
     po = PurchaseOrder(
         supplier_id=supplier_id,
         product_id=product_id,
         quantity=quantity,
-        expected_delivery=expected_delivery,
+        issue_date=day,
+        expected_delivery=actual_expected_delivery,
         status=PurchaseOrderStatus.OPEN
     )
-
     session.add(po)
+    session.flush()
+    
+    log_event(session, EventType.PO_CREATED, day, {"po_id": po.id, "supplier": supplier_id, "qty": quantity})
     session.commit()
-
-    # Log event
-    _log_event(session, EventType.PO_CREATED, {
-        "po_id": po.id,
-        "supplier_id": supplier_id,
-        "product_id": product_id,
-        "quantity": quantity
-    })
-
-    return PurchaseOrderRead(
-        id=po.id,
-        supplier_id=po.supplier_id,
-        product_id=po.product_id,
-        quantity=po.quantity,
-        issue_date=po.issue_date,
-        expected_delivery=po.expected_delivery,
-        status=po.status.value
-    )
-
-
-def _generate_demand(session: Session) -> List[Dict[str, Any]]:
-    """Generate random manufacturing orders (simplified)."""
-    from src.models import Product
-    import random
-
-    events = []
-
-    # Simple random demand generation
-    finished_products = session.query(Product).filter(Product.type == "finished").all()
-
-    for product in finished_products:
-        # Random demand: 0-3 units per day
-        demand = random.randint(0, 3)
-        if demand > 0:
-            order = ManufacturingOrder(
-                product_id=product.id,
-                quantity=demand,
-                status=OrderStatus.PENDING
-            )
-            session.add(order)
-            session.flush()
-
-            events.append({
-                "type": "order_created",
-                "order_id": order.id,
-                "product_id": product.id,
-                "quantity": demand
-            })
-
-    return events
-
-
-def _process_purchase_arrivals(session: Session) -> List[Dict[str, Any]]:
-    """Process purchase orders that have arrived."""
-    from src.services.inventory import update_inventory
-
-    current_date = datetime.utcnow()
-    events = []
-
-    # Find arrived POs
-    arrived_pos = session.query(PurchaseOrder).filter(
-        PurchaseOrder.status == PurchaseOrderStatus.OPEN,
-        PurchaseOrder.expected_delivery <= current_date
-    ).all()
-
-    for po in arrived_pos:
-        po.status = PurchaseOrderStatus.RECEIVED
-        update_inventory(session, po.product_id, po.quantity)
-
-        events.append({
-            "type": "po_received",
-            "po_id": po.id,
-            "product_id": po.product_id,
-            "quantity": po.quantity
-        })
-
-    return events
-
-
-def _complete_production_orders(session: Session) -> List[Dict[str, Any]]:
-    """Complete manufacturing orders (simplified - complete immediately)."""
-    events = []
-
-    # For now, complete all in-progress orders (simplified model)
-    in_progress_orders = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.IN_PROGRESS
-    ).all()
-
-    for order in in_progress_orders:
-        order.status = OrderStatus.COMPLETED
-
-        # Add finished product to inventory
-        from src.services.inventory import update_inventory
-        update_inventory(session, order.product_id, order.quantity)
-
-        events.append({
-            "type": "order_completed",
-            "order_id": order.id,
-            "product_id": order.product_id,
-            "quantity": order.quantity
-        })
-
-    return events
-
-
-def _start_production_orders(session: Session) -> List[Dict[str, Any]]:
-    """Start new production orders up to daily capacity."""
-    # Simplified - for now, all released orders are started immediately
-    # In a more complex model, this would consider capacity constraints
-    events = []
-    return events
-
-
-def _log_event(session: Session, event_type: EventType, details: Dict[str, Any]) -> None:
-    """Log an event to the audit trail."""
-    event = Event(
-        type=event_type,
-        sim_date=datetime.utcnow(),
-        detail=details
-    )
-    session.add(event)
-
-
-def _record_daily_metrics(session: Session, day: int) -> None:
-    """Record daily metrics for the given day."""
-    # Calculate metrics
-    inventory_levels = get_inventory_levels(session)
-    total_inventory = sum(item.quantity for item in inventory_levels)
-
-    pending_orders_count = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.PENDING
-    ).count()
-
-    completed_orders_count = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.COMPLETED
-    ).count()
-
-    open_pos_count = session.query(PurchaseOrder).filter(
-        PurchaseOrder.status == PurchaseOrderStatus.OPEN
-    ).count()
-
-    # For now, production output is the number of completed orders
-    # In a more sophisticated system, this would track actual units produced
-    production_output = completed_orders_count
-
-    # Record metrics
-    record_daily_metrics(
-        session=session,
-        day=day,
-        total_inventory=total_inventory,
-        pending_orders=pending_orders_count,
-        completed_orders=completed_orders_count,
-        open_purchase_orders=open_pos_count,
-        production_output=production_output
-    )
+    return PurchaseOrderRead.model_validate(po)
 
 
 def export_state(session: Session) -> Dict[str, Any]:
     """Export full simulation state as JSON-compatible data."""
-    raise NotImplementedError("export_state is not implemented yet")
+    # A complete export is a big dump. We export models as JSON dicts.
+    from src.models import Product, Supplier, BOM, Inventory
+    
+    state = {
+        "current_day": get_current_day(session),
+        "products": [{"id": p.id, "name": p.name, "type": p.type.value} for p in session.query(Product).all()],
+        "bom": [{"id": b.id, "finished_product_id": b.finished_product_id, "material_id": b.material_id, "qty": b.quantity} for b in session.query(BOM).all()],
+        "suppliers": [{"id": s.id, "name": s.name, "product_id": s.product_id, "cost": s.unit_cost, "lead_time": s.lead_time_days, "min_qty": s.min_order_qty} for s in session.query(Supplier).all()],
+        "inventory": [{"product_id": i.product_id, "quantity": i.quantity, "reserved": i.reserved} for i in session.query(Inventory).all()],
+        "manufacturing_orders": [{"id": o.id, "product_id": o.product_id, "qty": o.quantity, "status": o.status.value, "created": o.created_date, "start": o.start_date, "completed": o.completed_date} for o in session.query(ManufacturingOrder).all()],
+        "purchase_orders": [{"id": p.id, "supplier_id": p.supplier_id, "product_id": p.product_id, "qty": p.quantity, "issue": p.issue_date, "expected": p.expected_delivery, "status": p.status.value} for p in session.query(PurchaseOrder).all()],
+        "events": [{"id": e.id, "type": e.type.value, "day": e.sim_date, "details": e.details} for e in session.query(Event).all()]
+    }
+    return state
 
 
 def import_state(session: Session, state: Dict[str, Any]) -> None:
     """Import simulation state from JSON data."""
-    raise NotImplementedError("import_state is not implemented yet")
+    # Since round trip import/export implies truncating and loading
+    # We will reset and manually build the db objects from Dict
+    raise NotImplementedError("import_state requires explicit table wiping logic, skipping for now per MVP")

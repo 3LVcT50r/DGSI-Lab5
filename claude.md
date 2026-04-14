@@ -160,18 +160,15 @@ DGSI-Lab5/
 | Area | Status | Notes |
 |------|--------|-------|
 | PRD | ✅ Done | `prd.md` complete |
-| Project Setup | ✅ Done | Requirements.txt, folder structure, scripts de ejecución |
-| Database Schema | ✅ Done | SQLAlchemy models completos con todas las entidades |
-| Configuration | ✅ Done | Default BOM, suppliers, demand params en JSON |
-| Simulation Engine | ✅ **Implemented** | Lógica de simulación básica funcionando (carga inicial, estado, advance day) |
-| API Layer | ✅ **Implemented** | Endpoints REST completos con datos reales |
-| UI Dashboard | ✅ **Implemented** | Streamlit conectada al backend con funcionalidades completas |
-| Tests | ⚠️ Basic | Tests básicos funcionando, faltan tests de integración |
-| Charts & Historical Data | ✅ **Implemented** | Dashboard completo con 5 pestañas de gráficos y métricas históricas |
+| Project Setup | ✅ Done | Folder structure and `requirements.txt` ready |
+| Database Schema | ✅ Done | SQLAlchemy models implemented (with `SimulationState` for turn-based clock) |
+| Configuration | ✅ Done | Expanded `default_config.json` with BOM, suppliers, and demand parameters |
+| Simulation Engine | ✅ Done | Turn-based implementation (1 day = 1 cycle) using `advance_day()` |
+| API Layer | ✅ Done | 20+ REST endpoints completed (Swagger at `/docs`) |
+| UI Dashboard | ✅ Done | Streamlit interface operational with interactive forms and Matplotlib chart |
+| Tests & Polish | ⏳ Pending | Basic scaffold exists, but full unit/integration tests and Import logic are pending |
 
-**Next Up:** Implementar import/export de estado JSON y agregar manejo de errores avanzado.
-
-**Next Up:** Refinar la lógica de simulación (capacidad de producción, demanda realista) y agregar export/import de estado.
+**Next Up:** **Phase 6: Polish & Testing**. The focus shifts to implementing robust unit and integration tests for the API/services, finalizing the `import_state` functionality (JSON state injection), and refining project documentation.
 
 ## Example Production Plan
 
