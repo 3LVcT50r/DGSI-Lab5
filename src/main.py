@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes import api_router
@@ -7,10 +8,19 @@ import src.models as models
 
 settings = Settings()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    models.Base.metadata.create_all(bind=engine)
+    yield
+    # Shutdown
+    pass
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
     description="REST API for the 3D Printer Factory Simulation System",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -22,11 +32,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
-
-
-@app.on_event("startup")
-def startup_event():
-    models.Base.metadata.create_all(bind=engine)
 
 
 @app.get("/health")

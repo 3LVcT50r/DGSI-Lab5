@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ProductType(str, Enum):
@@ -21,8 +21,7 @@ class ProductCreate(ProductBase):
 class ProductRead(ProductBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BOMItem(BaseModel):
@@ -40,16 +39,14 @@ class SupplierBase(BaseModel):
 class SupplierRead(SupplierBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class InventoryRead(BaseModel):
     product_id: int
     quantity: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ManufacturingOrderBase(BaseModel):
@@ -62,8 +59,7 @@ class ManufacturingOrderRead(ManufacturingOrderBase):
     created_date: datetime
     status: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderBase(BaseModel):
@@ -78,8 +74,7 @@ class PurchaseOrderRead(PurchaseOrderBase):
     issue_date: datetime
     status: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EventRead(BaseModel):
@@ -88,8 +83,7 @@ class EventRead(BaseModel):
     sim_date: datetime
     detail: Dict[str, object]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SimulationStatus(BaseModel):
