@@ -283,8 +283,125 @@ def export_state(session: Session) -> Dict[str, Any]:
     return state
 
 
+def _clear_state_tables(session: Session) -> None:
+    """Clear all simulation tables in dependency-safe order."""
+    from src.models import Event, PurchaseOrder, ManufacturingOrder, Inventory, Supplier, BOM, Product, SimulationState
+
+    session.query(Event).delete()
+    session.query(PurchaseOrder).delete()
+    session.query(ManufacturingOrder).delete()
+    session.query(Inventory).delete()
+    session.query(Supplier).delete()
+    session.query(BOM).delete()
+    session.query(Product).delete()
+    session.query(SimulationState).delete()
+    session.flush()
+
+
 def import_state(session: Session, state: Dict[str, Any]) -> None:
     """Import simulation state from JSON data."""
-    # Since round trip import/export implies truncating and loading
-    # We will reset and manually build the db objects from Dict
-    raise NotImplementedError("import_state requires explicit table wiping logic, skipping for now per MVP")
+    from src.models import (
+        Product,
+        BOM,
+        Supplier,
+        Inventory,
+        ManufacturingOrder,
+        PurchaseOrder,
+        Event,
+        SimulationState,
+    )
+
+    required_keys = {
+        "current_day",
+        "products",
+        "bom",
+        "suppliers",
+        "inventory",
+        "manufacturing_orders",
+        "purchase_orders",
+        "events",
+    }
+    missing = required_keys - state.keys()
+    if missing:
+        raise ValueError(f"State payload is missing required keys: {', '.join(sorted(missing))}")
+
+    _clear_state_tables(session)
+
+    products_by_id = {}
+    for product_data in state["products"]:
+        prod = Product(
+            id=product_data["id"],
+            name=product_data["name"],
+            type=product_data["type"],
+        )
+        session.add(prod)
+        products_by_id[prod.id] = prod
+
+    session.flush()
+
+    for bom_data in state["bom"]:
+        bom = BOM(
+            id=bom_data.get("id"),
+            finished_product_id=bom_data["finished_product_id"],
+            material_id=bom_data["material_id"],
+            quantity=bom_data["qty"],
+        )
+        session.add(bom)
+
+    for supplier_data in state["suppliers"]:
+        supplier = Supplier(
+            id=supplier_data.get("id"),
+            name=supplier_data["name"],
+            product_id=supplier_data["product_id"],
+            unit_cost=supplier_data["cost"],
+            lead_time_days=supplier_data["lead_time"],
+            min_order_qty=supplier_data.get("min_qty", 1),
+        )
+        session.add(supplier)
+
+    session.flush()
+
+    for inv_data in state["inventory"]:
+        inventory = Inventory(
+            product_id=inv_data["product_id"],
+            quantity=inv_data["quantity"],
+            reserved=inv_data.get("reserved", 0),
+        )
+        session.add(inventory)
+
+    for mo_data in state["manufacturing_orders"]:
+        mo = ManufacturingOrder(
+            id=mo_data.get("id"),
+            created_date=mo_data["created"],
+            product_id=mo_data["product_id"],
+            quantity=mo_data["qty"],
+            status=OrderStatus(mo_data["status"]),
+            start_date=mo_data.get("start"),
+            completed_date=mo_data.get("completed"),
+        )
+        session.add(mo)
+
+    for po_data in state["purchase_orders"]:
+        po = PurchaseOrder(
+            id=po_data.get("id"),
+            supplier_id=po_data["supplier_id"],
+            product_id=po_data["product_id"],
+            quantity=po_data["qty"],
+            issue_date=po_data["issue"],
+            expected_delivery=po_data["expected"],
+            status=PurchaseOrderStatus(po_data["status"]),
+        )
+        session.add(po)
+
+    for event_data in state["events"]:
+        event = Event(
+            id=event_data.get("id"),
+            type=EventType(event_data["type"]),
+            sim_date=event_data["day"],
+            details=event_data.get("details", {}),
+        )
+        session.add(event)
+
+    sim_state = SimulationState(current_day=state["current_day"])
+    session.add(sim_state)
+    session.commit()

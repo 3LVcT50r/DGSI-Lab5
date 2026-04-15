@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import requests
 import pandas as pd
@@ -30,6 +31,29 @@ def post_data(endpoint: str, json_data=None):
         st.error(f"Error: {e}")
         return None
 
+
+def post_file(endpoint: str, file_name: str, file_bytes: bytes):
+    try:
+        response = requests.post(
+            f"{API_URL}/{endpoint}",
+            files={"file": (file_name, file_bytes, "application/json")},
+        )
+        response.raise_for_status()
+        st.success(f"Success: {endpoint}")
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        error_msg = None
+        try:
+            error_msg = e.response.json().get("detail", str(e))
+        except Exception:
+            error_msg = str(e)
+        st.error(f"Error: {error_msg}")
+        return None
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+
+
 def refresh():
     st.rerun()
 
@@ -58,6 +82,27 @@ if st.sidebar.button("▶️ Advance Day"):
 if st.sidebar.button("🔄 Reset Simulation"):
     post_data("simulate/reset")
     refresh()
+
+st.sidebar.markdown("---")
+st.sidebar.header("Simulation State")
+
+export_state = fetch_data("state/export")
+if export_state is not None:
+    export_json = json.dumps(export_state, indent=2)
+    st.sidebar.download_button(
+        label="Export Simulation State",
+        data=export_json,
+        file_name="factory_state.json",
+        mime="application/json",
+    )
+
+import_file = st.sidebar.file_uploader("Import Simulation State", type=["json"])
+if import_file is not None:
+    if st.sidebar.button("Upload State"):
+        file_bytes = import_file.read()
+        result = post_file("state/import", import_file.name, file_bytes)
+        if result is not None:
+            refresh()
 
 st.sidebar.markdown("---")
 st.sidebar.header("Purchasing (Raw Materials)")
