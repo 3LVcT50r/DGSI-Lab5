@@ -1,0 +1,25 @@
+{
+  "products": [
+    {
+      "name": "pcb",
+      "description": "Main control board",
+      "lead_time_days": 3,
+      "pricing": [
+        {"min_qty": 1, "price": 40},
+        {"min_qty": 20, "price": 32},
+        {"min_qty": 200, "price": 25}
+      ],
+      "initial_stock": 500
+    },
+    {
+      "name": "extruder",
+      "description": "Hot-end extruder",
+      "lead_time_days": 5,
+      "pricing": [
+        {"min_qty": 1, "price": 60},
+        {"min_qty": 10, "price": 50}
+      ],
+      "initial_stock": 200
+    }
+  ]
+}

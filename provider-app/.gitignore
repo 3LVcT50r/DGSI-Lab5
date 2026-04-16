@@ -1,0 +1,8 @@
+venv/
+provider.db
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+.DS_Store
