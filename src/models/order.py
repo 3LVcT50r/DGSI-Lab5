@@ -1,15 +1,7 @@
-import enum
 from sqlalchemy import Column, Integer, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from src.models.base import Base
-
-
-class OrderStatus(str, enum.Enum):
-    """Lifecycle states for a manufacturing order."""
-    PENDING = "pending"
-    WAITING_FOR_MATERIALS = "waiting_for_materials"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
+from src.models.common import OrderState
 
 
 class ManufacturingOrder(Base):
@@ -20,9 +12,9 @@ class ManufacturingOrder(Base):
     created_date = Column(Integer, nullable=False)          # simulation day
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
-    status: Column[OrderStatus] = Column(
-        SAEnum(OrderStatus),
-        default=OrderStatus.PENDING,
+    status: Column[OrderState] = Column(
+        SAEnum(OrderState),
+        default=OrderState.PENDING,
         nullable=False,
     )
     start_date = Column(Integer, nullable=True)             # simulation day

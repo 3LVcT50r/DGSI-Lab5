@@ -1,0 +1,1137 @@
+{
+  "current_day": 6,
+  "products": [
+    {
+      "id": 1,
+      "name": "pcb",
+      "type": "raw"
+    },
+    {
+      "id": 2,
+      "name": "sensor_autonivel",
+      "type": "raw"
+    },
+    {
+      "id": 3,
+      "name": "enchufe_schuko",
+      "type": "raw"
+    },
+    {
+      "id": 4,
+      "name": "cables_conexion",
+      "type": "raw"
+    },
+    {
+      "id": 5,
+      "name": "kit_piezas",
+      "type": "raw"
+    },
+    {
+      "id": 6,
+      "name": "transformador_24v",
+      "type": "raw"
+    },
+    {
+      "id": 7,
+      "name": "extrusor",
+      "type": "raw"
+    },
+    {
+      "id": 8,
+      "name": "pcb_ref",
+      "type": "raw"
+    },
+    {
+      "id": 9,
+      "name": "P3D-Classic",
+      "type": "finished"
+    },
+    {
+      "id": 10,
+      "name": "P3D-Pro",
+      "type": "finished"
+    }
+  ],
+  "bom": [
+    {
+      "id": 1,
+      "finished_product_id": 9,
+      "material_id": 5,
+      "qty": 1.0
+    },
+    {
+      "id": 2,
+      "finished_product_id": 9,
+      "material_id": 1,
+      "qty": 1.0
+    },
+    {
+      "id": 3,
+      "finished_product_id": 9,
+      "material_id": 7,
+      "qty": 1.0
+    },
+    {
+      "id": 4,
+      "finished_product_id": 9,
+      "material_id": 4,
+      "qty": 2.0
+    },
+    {
+      "id": 5,
+      "finished_product_id": 9,
+      "material_id": 6,
+      "qty": 1.0
+    },
+    {
+      "id": 6,
+      "finished_product_id": 9,
+      "material_id": 3,
+      "qty": 1.0
+    },
+    {
+      "id": 7,
+      "finished_product_id": 10,
+      "material_id": 5,
+      "qty": 1.0
+    },
+    {
+      "id": 8,
+      "finished_product_id": 10,
+      "material_id": 1,
+      "qty": 1.0
+    },
+    {
+      "id": 9,
+      "finished_product_id": 10,
+      "material_id": 7,
+      "qty": 1.0
+    },
+    {
+      "id": 10,
+      "finished_product_id": 10,
+      "material_id": 2,
+      "qty": 1.0
+    },
+    {
+      "id": 11,
+      "finished_product_id": 10,
+      "material_id": 4,
+      "qty": 3.0
+    },
+    {
+      "id": 12,
+      "finished_product_id": 10,
+      "material_id": 6,
+      "qty": 1.0
+    },
+    {
+      "id": 13,
+      "finished_product_id": 10,
+      "material_id": 3,
+      "qty": 1.0
+    }
+  ],
+  "suppliers": [
+    {
+      "id": 1,
+      "name": "Componentes ABC",
+      "product_id": 5,
+      "cost": 90.0,
+      "lead_time": 3,
+      "min_qty": 1
+    },
+    {
+      "id": 2,
+      "name": "Componentes ABC",
+      "product_id": 1,
+      "cost": 25.0,
+      "lead_time": 5,
+      "min_qty": 1
+    },
+    {
+      "id": 3,
+      "name": "EuroComponents Ltd",
+      "product_id": 5,
+      "cost": 85.0,
+      "lead_time": 7,
+      "min_qty": 5
+    },
+    {
+      "id": 4,
+      "name": "EuroComponents Ltd",
+      "product_id": 7,
+      "cost": 35.0,
+      "lead_time": 4,
+      "min_qty": 5
+    },
+    {
+      "id": 5,
+      "name": "EuroComponents Ltd",
+      "product_id": 8,
+      "cost": 10.0,
+      "lead_time": 3,
+      "min_qty": 10
+    },
+    {
+      "id": 6,
+      "name": "EuroComponents Ltd",
+      "product_id": 2,
+      "cost": 15.0,
+      "lead_time": 2,
+      "min_qty": 10
+    },
+    {
+      "id": 7,
+      "name": "EuroComponents Ltd",
+      "product_id": 4,
+      "cost": 2.0,
+      "lead_time": 1,
+      "min_qty": 50
+    },
+    {
+      "id": 8,
+      "name": "EuroComponents Ltd",
+      "product_id": 6,
+      "cost": 18.0,
+      "lead_time": 3,
+      "min_qty": 5
+    },
+    {
+      "id": 9,
+      "name": "EuroComponents Ltd",
+      "product_id": 3,
+      "cost": 3.5,
+      "lead_time": 2,
+      "min_qty": 20
+    }
+  ],
+  "inventory": [
+    {
+      "product_id": 1,
+      "quantity": 55.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 2,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 3,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 4,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 5,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 6,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 7,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 8,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 9,
+      "quantity": 0.0,
+      "reserved": 0.0
+    },
+    {
+      "product_id": 10,
+      "quantity": 0.0,
+      "reserved": 0.0
+    }
+  ],
+  "manufacturing_orders": [
+    {
+      "id": 1,
+      "product_id": 9,
+      "qty": 6,
+      "status": "waiting_for_materials",
+      "created": 1,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 2,
+      "product_id": 10,
+      "qty": 4,
+      "status": "waiting_for_materials",
+      "created": 1,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 3,
+      "product_id": 9,
+      "qty": 8,
+      "status": "waiting_for_materials",
+      "created": 2,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 4,
+      "product_id": 10,
+      "qty": 4,
+      "status": "waiting_for_materials",
+      "created": 2,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 5,
+      "product_id": 9,
+      "qty": 5,
+      "status": "waiting_for_materials",
+      "created": 3,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 6,
+      "product_id": 10,
+      "qty": 3,
+      "status": "waiting_for_materials",
+      "created": 3,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 7,
+      "product_id": 9,
+      "qty": 4,
+      "status": "waiting_for_materials",
+      "created": 4,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 8,
+      "product_id": 10,
+      "qty": 4,
+      "status": "waiting_for_materials",
+      "created": 4,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 9,
+      "product_id": 9,
+      "qty": 8,
+      "status": "waiting_for_materials",
+      "created": 5,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 10,
+      "product_id": 10,
+      "qty": 3,
+      "status": "waiting_for_materials",
+      "created": 5,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 11,
+      "product_id": 9,
+      "qty": 7,
+      "status": "pending",
+      "created": 6,
+      "start": null,
+      "completed": null
+    },
+    {
+      "id": 12,
+      "product_id": 10,
+      "qty": 3,
+      "status": "pending",
+      "created": 6,
+      "start": null,
+      "completed": null
+    }
+  ],
+  "purchase_orders": [
+    {
+      "id": 1,
+      "supplier_id": null,
+      "provider_name": "ChipSupply Co",
+      "provider_order_id": 1,
+      "product_id": 1,
+      "qty": 50,
+      "issue": 1,
+      "expected": 4,
+      "status": "delivered"
+    },
+    {
+      "id": 2,
+      "supplier_id": null,
+      "provider_name": "ChipSupply Co",
+      "provider_order_id": 2,
+      "product_id": 1,
+      "qty": 20,
+      "issue": 5,
+      "expected": 8,
+      "status": "shipped"
+    }
+  ],
+  "events": [
+    {
+      "id": 1,
+      "type": "order_placed",
+      "day": 1,
+      "details": {
+        "order_id": 1,
+        "product": "P3D-Classic",
+        "qty": 6
+      }
+    },
+    {
+      "id": 2,
+      "type": "order_placed",
+      "day": 1,
+      "details": {
+        "order_id": 2,
+        "product": "P3D-Pro",
+        "qty": 4
+      }
+    },
+    {
+      "id": 3,
+      "type": "day_advanced",
+      "day": 1,
+      "details": {
+        "status": "advanced"
+      }
+    },
+    {
+      "id": 4,
+      "type": "po_created",
+      "day": 1,
+      "details": {
+        "po_id": 1,
+        "provider": "ChipSupply Co",
+        "remote_id": 1,
+        "qty": 50
+      }
+    },
+    {
+      "id": 5,
+      "type": "po_received",
+      "day": 2,
+      "details": {
+        "po_id": 1,
+        "product_id": 1,
+        "qty": 50
+      }
+    },
+    {
+      "id": 6,
+      "type": "stockout",
+      "day": 2,
+      "details": {
+        "order_id": 1,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 6.0, Have 0.0)",
+          "pcb (Need 6.0, Have 5.0)",
+          "extrusor (Need 6.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 6.0, Have 0.0)",
+          "enchufe_schuko (Need 6.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "stockout",
+      "day": 2,
+      "details": {
+        "order_id": 2,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "order_placed",
+      "day": 2,
+      "details": {
+        "order_id": 3,
+        "product": "P3D-Classic",
+        "qty": 8
+      }
+    },
+    {
+      "id": 9,
+      "type": "order_placed",
+      "day": 2,
+      "details": {
+        "order_id": 4,
+        "product": "P3D-Pro",
+        "qty": 4
+      }
+    },
+    {
+      "id": 10,
+      "type": "day_advanced",
+      "day": 2,
+      "details": {
+        "status": "advanced"
+      }
+    },
+    {
+      "id": 11,
+      "type": "po_received",
+      "day": 3,
+      "details": {
+        "po_id": 1,
+        "product_id": 1,
+        "qty": 50
+      }
+    },
+    {
+      "id": 12,
+      "type": "stockout",
+      "day": 3,
+      "details": {
+        "order_id": 1,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 6.0, Have 0.0)",
+          "pcb (Need 6.0, Have 5.0)",
+          "extrusor (Need 6.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 6.0, Have 0.0)",
+          "enchufe_schuko (Need 6.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "type": "stockout",
+      "day": 3,
+      "details": {
+        "order_id": 2,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": "stockout",
+      "day": 3,
+      "details": {
+        "order_id": 3,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 8.0, Have 0.0)",
+          "pcb (Need 8.0, Have 5.0)",
+          "extrusor (Need 8.0, Have 0.0)",
+          "cables_conexion (Need 16.0, Have 0.0)",
+          "transformador_24v (Need 8.0, Have 0.0)",
+          "enchufe_schuko (Need 8.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": "stockout",
+      "day": 3,
+      "details": {
+        "order_id": 4,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": "order_placed",
+      "day": 3,
+      "details": {
+        "order_id": 5,
+        "product": "P3D-Classic",
+        "qty": 5
+      }
+    },
+    {
+      "id": 17,
+      "type": "order_placed",
+      "day": 3,
+      "details": {
+        "order_id": 6,
+        "product": "P3D-Pro",
+        "qty": 3
+      }
+    },
+    {
+      "id": 18,
+      "type": "day_advanced",
+      "day": 3,
+      "details": {
+        "status": "advanced"
+      }
+    },
+    {
+      "id": 19,
+      "type": "po_received",
+      "day": 4,
+      "details": {
+        "po_id": 1,
+        "product_id": 1,
+        "qty": 50
+      }
+    },
+    {
+      "id": 20,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 1,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 6.0, Have 0.0)",
+          "pcb (Need 6.0, Have 5.0)",
+          "extrusor (Need 6.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 6.0, Have 0.0)",
+          "enchufe_schuko (Need 6.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 2,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 3,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 8.0, Have 0.0)",
+          "pcb (Need 8.0, Have 5.0)",
+          "extrusor (Need 8.0, Have 0.0)",
+          "cables_conexion (Need 16.0, Have 0.0)",
+          "transformador_24v (Need 8.0, Have 0.0)",
+          "enchufe_schuko (Need 8.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 23,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 4,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 5,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 5.0, Have 0.0)",
+          "extrusor (Need 5.0, Have 0.0)",
+          "cables_conexion (Need 10.0, Have 0.0)",
+          "transformador_24v (Need 5.0, Have 0.0)",
+          "enchufe_schuko (Need 5.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": "stockout",
+      "day": 4,
+      "details": {
+        "order_id": 6,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 3.0, Have 0.0)",
+          "extrusor (Need 3.0, Have 0.0)",
+          "sensor_autonivel (Need 3.0, Have 0.0)",
+          "cables_conexion (Need 9.0, Have 0.0)",
+          "transformador_24v (Need 3.0, Have 0.0)",
+          "enchufe_schuko (Need 3.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "type": "order_placed",
+      "day": 4,
+      "details": {
+        "order_id": 7,
+        "product": "P3D-Classic",
+        "qty": 4
+      }
+    },
+    {
+      "id": 27,
+      "type": "order_placed",
+      "day": 4,
+      "details": {
+        "order_id": 8,
+        "product": "P3D-Pro",
+        "qty": 4
+      }
+    },
+    {
+      "id": 28,
+      "type": "day_advanced",
+      "day": 4,
+      "details": {
+        "status": "advanced"
+      }
+    },
+    {
+      "id": 29,
+      "type": "po_received",
+      "day": 5,
+      "details": {
+        "po_id": 1,
+        "product_id": 1,
+        "qty": 50
+      }
+    },
+    {
+      "id": 30,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 1,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 6.0, Have 0.0)",
+          "extrusor (Need 6.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 6.0, Have 0.0)",
+          "enchufe_schuko (Need 6.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 31,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 2,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 3,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 8.0, Have 0.0)",
+          "extrusor (Need 8.0, Have 0.0)",
+          "cables_conexion (Need 16.0, Have 0.0)",
+          "transformador_24v (Need 8.0, Have 0.0)",
+          "enchufe_schuko (Need 8.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 33,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 4,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 34,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 5,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 5.0, Have 0.0)",
+          "extrusor (Need 5.0, Have 0.0)",
+          "cables_conexion (Need 10.0, Have 0.0)",
+          "transformador_24v (Need 5.0, Have 0.0)",
+          "enchufe_schuko (Need 5.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 35,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 6,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 3.0, Have 0.0)",
+          "extrusor (Need 3.0, Have 0.0)",
+          "sensor_autonivel (Need 3.0, Have 0.0)",
+          "cables_conexion (Need 9.0, Have 0.0)",
+          "transformador_24v (Need 3.0, Have 0.0)",
+          "enchufe_schuko (Need 3.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 36,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 7,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 8.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 37,
+      "type": "stockout",
+      "day": 5,
+      "details": {
+        "order_id": 8,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 38,
+      "type": "order_placed",
+      "day": 5,
+      "details": {
+        "order_id": 9,
+        "product": "P3D-Classic",
+        "qty": 8
+      }
+    },
+    {
+      "id": 39,
+      "type": "order_placed",
+      "day": 5,
+      "details": {
+        "order_id": 10,
+        "product": "P3D-Pro",
+        "qty": 3
+      }
+    },
+    {
+      "id": 40,
+      "type": "day_advanced",
+      "day": 5,
+      "details": {
+        "status": "advanced"
+      }
+    },
+    {
+      "id": 41,
+      "type": "po_created",
+      "day": 5,
+      "details": {
+        "po_id": 2,
+        "provider": "ChipSupply Co",
+        "remote_id": 2,
+        "qty": 20
+      }
+    },
+    {
+      "id": 42,
+      "type": "po_received",
+      "day": 6,
+      "details": {
+        "po_id": 2,
+        "product_id": 1,
+        "qty": 20
+      }
+    },
+    {
+      "id": 43,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 1,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 6.0, Have 0.0)",
+          "extrusor (Need 6.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 6.0, Have 0.0)",
+          "enchufe_schuko (Need 6.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 44,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 2,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 45,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 3,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 8.0, Have 0.0)",
+          "extrusor (Need 8.0, Have 0.0)",
+          "cables_conexion (Need 16.0, Have 0.0)",
+          "transformador_24v (Need 8.0, Have 0.0)",
+          "enchufe_schuko (Need 8.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 46,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 4,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 47,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 5,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 5.0, Have 0.0)",
+          "extrusor (Need 5.0, Have 0.0)",
+          "cables_conexion (Need 10.0, Have 0.0)",
+          "transformador_24v (Need 5.0, Have 0.0)",
+          "enchufe_schuko (Need 5.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 48,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 6,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 3.0, Have 0.0)",
+          "extrusor (Need 3.0, Have 0.0)",
+          "sensor_autonivel (Need 3.0, Have 0.0)",
+          "cables_conexion (Need 9.0, Have 0.0)",
+          "transformador_24v (Need 3.0, Have 0.0)",
+          "enchufe_schuko (Need 3.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 49,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 7,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 8.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 50,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 8,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 4.0, Have 0.0)",
+          "extrusor (Need 4.0, Have 0.0)",
+          "sensor_autonivel (Need 4.0, Have 0.0)",
+          "cables_conexion (Need 12.0, Have 0.0)",
+          "transformador_24v (Need 4.0, Have 0.0)",
+          "enchufe_schuko (Need 4.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 51,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 9,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 8.0, Have 0.0)",
+          "extrusor (Need 8.0, Have 0.0)",
+          "cables_conexion (Need 16.0, Have 0.0)",
+          "transformador_24v (Need 8.0, Have 0.0)",
+          "enchufe_schuko (Need 8.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 52,
+      "type": "stockout",
+      "day": 6,
+      "details": {
+        "order_id": 10,
+        "reason": "Insufficient materials",
+        "missing": [
+          "kit_piezas (Need 3.0, Have 0.0)",
+          "extrusor (Need 3.0, Have 0.0)",
+          "sensor_autonivel (Need 3.0, Have 0.0)",
+          "cables_conexion (Need 9.0, Have 0.0)",
+          "transformador_24v (Need 3.0, Have 0.0)",
+          "enchufe_schuko (Need 3.0, Have 0.0)"
+        ]
+      }
+    },
+    {
+      "id": 53,
+      "type": "order_placed",
+      "day": 6,
+      "details": {
+        "order_id": 11,
+        "product": "P3D-Classic",
+        "qty": 7
+      }
+    },
+    {
+      "id": 54,
+      "type": "order_placed",
+      "day": 6,
+      "details": {
+        "order_id": 12,
+        "product": "P3D-Pro",
+        "qty": 3
+      }
+    },
+    {
+      "id": 55,
+      "type": "day_advanced",
+      "day": 6,
+      "details": {
+        "status": "advanced"
+      }
+    }
+  ]
+}

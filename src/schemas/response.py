@@ -51,7 +51,9 @@ class ManufacturingOrderRead(ManufacturingOrderBase):
 class PurchaseOrderRead(BaseModel):
     """Purchase order response."""
     id: int
-    supplier_id: int
+    supplier_id: Optional[int] = None
+    provider_name: Optional[str] = None
+    provider_order_id: Optional[int] = None
     product_id: int
     quantity: int
     issue_date: int
@@ -63,9 +65,11 @@ class PurchaseOrderRead(BaseModel):
 class EventRead(BaseModel):
     """Event response."""
     id: int
-    type: str
-    sim_date: int
-    details: Dict[str, Any]
+    sim_day: int
+    event_type: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    detail: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -217,7 +217,7 @@ with col2:
         df_events = pd.DataFrame(events)
         st.dataframe(
             df_events[[
-                "sim_date", "type", "details",
+                "sim_day", "event_type", "detail",
             ]],
             use_container_width=True,
         )
@@ -231,19 +231,28 @@ st.markdown("### 📈 Charts")
 if events:
     df_events = pd.DataFrame(events)
     completions = df_events[
-        df_events["type"] == "order_completed"
+        df_events["event_type"] == "ORDER_COMPLETED"
     ]
     if not completions.empty:
-        qty_extract = completions["details"].apply(
-            lambda x: x.get("qty", 0)
-        )
+        import json
+        def get_qty(x):
+            try:
+                if isinstance(x, str):
+                    return json.loads(x).get("qty", 0)
+                elif isinstance(x, dict):
+                    return x.get("qty", 0)
+                return 0
+            except:
+                return 0
+
+        qty_extract = completions["detail"].apply(get_qty)
         completions = completions.assign(
             completed_qty=qty_extract
         )
 
         daily_completions = (
             completions
-            .groupby("sim_date")["completed_qty"]
+            .groupby("sim_day")["completed_qty"]
             .sum()
             .reset_index()
         )
@@ -253,7 +262,7 @@ if events:
 
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(
-            daily_completions["sim_date"],
+            daily_completions["sim_day"],
             daily_completions["cumulative"],
             marker="o",
             color="blue",

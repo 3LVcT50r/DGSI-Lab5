@@ -14,12 +14,11 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 from src.config import Settings
+from src.models.common import OrderState
 from src.models import (
     SimulationState,
     ManufacturingOrder,
-    OrderStatus,
     PurchaseOrder,
-    PurchaseOrderStatus,
     Product,
     ProductType,
     Event,
@@ -47,7 +46,22 @@ def log_event(
     details: Dict[str, Any],
 ):
     """Helper to write to the event log."""
-    evt = Event(type=event_type, sim_date=sim_date, details=details)
+    entity_type = None
+    entity_id = None
+    if "order_id" in details:
+        entity_type = "manufacturing_order"
+        entity_id = details["order_id"]
+    elif "po_id" in details:
+        entity_type = "purchase_order"
+        entity_id = details["po_id"]
+        
+    evt = Event(
+        sim_day=sim_date,
+        event_type=event_type.value,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        detail=json.dumps(details)
+    )
     session.add(evt)
 
 
@@ -94,7 +108,7 @@ def generate_demand(
                 created_date=day,
                 product_id=prod.id,
                 quantity=demand_qty,
-                status=OrderStatus.PENDING,
+                status=OrderState.PENDING,
             )
             session.add(mo)
             session.flush()
@@ -134,16 +148,45 @@ def advance_day(session: Session) -> Dict[str, Any]:
     )
 
     # 2. Process purchase arrivals
-    arriving_pos = session.query(PurchaseOrder).filter(
-        PurchaseOrder.status == PurchaseOrderStatus.OPEN,
-        PurchaseOrder.expected_delivery <= today,
+    import httpx
+    providers_map = {}
+    try:
+        with open("data/network_config.json", "r") as f:
+            net_cfg = json.load(f)
+            for prov in net_cfg.get("manufacturer", {}).get("providers", []):
+                providers_map[prov["name"]] = prov["url"]
+    except Exception:
+        pass
+
+    open_pos = session.query(PurchaseOrder).filter(
+        PurchaseOrder.status.in_([OrderState.PENDING, OrderState.ACCEPTED, OrderState.SHIPPED])
     ).with_for_update().all()
 
-    for po in arriving_pos:
-        receive_purchase_order(
-            session, po.product_id, po.quantity
-        )
-        po.status = PurchaseOrderStatus.RECEIVED
+    for po in open_pos:
+        is_delivered = False
+        
+        if po.provider_name and po.provider_order_id:
+            url = providers_map.get(po.provider_name)
+            if url:
+                try:
+                    resp = httpx.get(f"{url}/api/orders/{po.provider_order_id}")
+                    if resp.status_code == 200:
+                        remote_order = resp.json()
+                        if remote_order.get("status") == "delivered":
+                            is_delivered = True
+                        elif remote_order.get("status") == "shipped":
+                            po.status = OrderState.SHIPPED
+                except Exception as e:
+                    logger.error(f"Failed to poll provider {po.provider_name}: {e}")
+        else:
+            if po.expected_delivery <= today:
+                is_delivered = True
+
+        if is_delivered:
+            receive_purchase_order(
+                session, po.product_id, po.quantity
+            )
+            po.status = OrderState.DELIVERED
         log_event(
             session,
             EventType.PO_RECEIVED,
@@ -157,11 +200,11 @@ def advance_day(session: Session) -> Dict[str, Any]:
 
     # 3. Complete in-progress production
     in_progress = session.query(ManufacturingOrder).filter(
-        ManufacturingOrder.status == OrderStatus.IN_PROGRESS
+        ManufacturingOrder.status == OrderState.IN_PROGRESS
     ).with_for_update().all()
 
     for mo in in_progress:
-        mo.status = OrderStatus.COMPLETED
+        mo.status = OrderState.COMPLETED
         mo.completed_date = today
         log_event(
             session,
@@ -173,8 +216,8 @@ def advance_day(session: Session) -> Dict[str, Any]:
     # 4. Start new orders (up to daily capacity)
     pending = session.query(ManufacturingOrder).filter(
         ManufacturingOrder.status.in_([
-            OrderStatus.PENDING,
-            OrderStatus.WAITING_FOR_MATERIALS,
+            OrderState.PENDING,
+            OrderState.WAITING_FOR_MATERIALS,
         ])
     ).order_by(
         ManufacturingOrder.created_date.asc()
@@ -192,7 +235,7 @@ def advance_day(session: Session) -> Dict[str, Any]:
             consume_materials(
                 session, mo.product_id, mo.quantity
             )
-            mo.status = OrderStatus.IN_PROGRESS
+            mo.status = OrderState.IN_PROGRESS
             mo.start_date = today
             started_qty_today += mo.quantity
             log_event(
@@ -208,7 +251,7 @@ def advance_day(session: Session) -> Dict[str, Any]:
                 {"order_id": mo.id, "qty": mo.quantity},
             )
         else:
-            mo.status = OrderStatus.WAITING_FOR_MATERIALS
+            mo.status = OrderState.WAITING_FOR_MATERIALS
             log_event(
                 session,
                 EventType.STOCKOUT,
@@ -223,6 +266,11 @@ def advance_day(session: Session) -> Dict[str, Any]:
     # 5. Generate demand for next simulation cycle
     generate_demand(session, today, settings)
 
+    log_event(
+        session, EventType.DAY_ADVANCED, today,
+        {"status": "advanced"}
+    )
+
     session.commit()
     return {"status": "advanced", "current_day": today}
 
@@ -233,13 +281,13 @@ def get_simulation_status(session: Session) -> SimulationStatus:
 
     pending_mos = session.query(ManufacturingOrder).filter(
         ManufacturingOrder.status.in_([
-            OrderStatus.PENDING,
-            OrderStatus.WAITING_FOR_MATERIALS,
+            OrderState.PENDING,
+            OrderState.WAITING_FOR_MATERIALS,
         ])
     ).all()
 
     open_pos = session.query(PurchaseOrder).filter(
-        PurchaseOrder.status == PurchaseOrderStatus.OPEN
+        PurchaseOrder.status.in_([OrderState.PENDING, OrderState.ACCEPTED, OrderState.SHIPPED])
     ).all()
 
     inventory = get_inventory_levels(session)
@@ -283,8 +331,8 @@ def release_order(
     if not mo:
         raise ValueError("Order not found.")
     if mo.status not in [
-        OrderStatus.PENDING,
-        OrderStatus.WAITING_FOR_MATERIALS,
+        OrderState.PENDING,
+        OrderState.WAITING_FOR_MATERIALS,
     ]:
         raise ValueError(
             f"Order is in status {mo.status.value}, "
@@ -299,7 +347,7 @@ def release_order(
         consume_materials(
             session, mo.product_id, mo.quantity
         )
-        mo.status = OrderStatus.IN_PROGRESS
+        mo.status = OrderState.IN_PROGRESS
         mo.start_date = day
         log_event(
             session, EventType.ORDER_RELEASED, day,
@@ -340,7 +388,8 @@ def create_purchase_order(
         )
 
     day = get_current_day(session)
-    actual_expected_delivery = day + supp.lead_time_days
+    # The Ironclad Rule: minimum lead time is 1 day
+    actual_expected_delivery = day + max(1, supp.lead_time_days)
 
     po = PurchaseOrder(
         supplier_id=supplier_id,
@@ -348,7 +397,7 @@ def create_purchase_order(
         quantity=quantity,
         issue_date=day,
         expected_delivery=actual_expected_delivery,
-        status=PurchaseOrderStatus.OPEN,
+        status=OrderState.PENDING,
     )
     session.add(po)
     session.flush()
@@ -358,6 +407,72 @@ def create_purchase_order(
         {
             "po_id": po.id,
             "supplier": supplier_id,
+            "qty": quantity,
+        },
+    )
+    session.commit()
+    return PurchaseOrderRead.model_validate(po)
+
+
+def create_network_purchase_order(
+    session: Session,
+    provider_name: str,
+    product_name: str,
+    quantity: int,
+) -> PurchaseOrderRead:
+    """Issue a purchase order to a REST provider."""
+    import httpx
+    
+    url = None
+    try:
+        with open("data/network_config.json", "r") as f:
+            net_cfg = json.load(f)
+            for prov in net_cfg.get("manufacturer", {}).get("providers", []):
+                if prov["name"] == provider_name:
+                    url = prov["url"]
+                    break
+    except Exception:
+        pass
+        
+    if not url:
+        raise ValueError(f"Provider {provider_name} not configured.")
+        
+    from src.models import Product
+    prod = session.query(Product).filter(Product.name == product_name).first()
+    if not prod:
+        raise ValueError(f"Product {product_name} not found in local catalog.")
+        
+    try:
+        resp = httpx.post(f"{url}/api/orders", json={
+            "product_name": product_name,
+            "quantity": quantity,
+            "buyer": "manufacturer"
+        })
+        resp.raise_for_status()
+        remote_data = resp.json()
+    except Exception as e:
+        raise ValueError(f"Failed to create order with provider: {e}")
+        
+    day = get_current_day(session)
+    po = PurchaseOrder(
+        supplier_id=None,
+        provider_name=provider_name,
+        provider_order_id=remote_data["id"],
+        product_id=prod.id,
+        quantity=quantity,
+        issue_date=day,
+        expected_delivery=remote_data["expected_delivery_day"],
+        status=OrderState.PENDING,
+    )
+    session.add(po)
+    session.flush()
+    
+    log_event(
+        session, EventType.PO_CREATED, day,
+        {
+            "po_id": po.id,
+            "provider": provider_name,
+            "remote_id": remote_data["id"],
             "qty": quantity,
         },
     )
@@ -421,6 +536,8 @@ def export_state(session: Session) -> Dict[str, Any]:
         {
             "id": p.id,
             "supplier_id": p.supplier_id,
+            "provider_name": p.provider_name,
+            "provider_order_id": p.provider_order_id,
             "product_id": p.product_id,
             "qty": p.quantity,
             "issue": p.issue_date,
@@ -432,9 +549,9 @@ def export_state(session: Session) -> Dict[str, Any]:
     events = [
         {
             "id": e.id,
-            "type": e.type.value,
-            "day": e.sim_date,
-            "details": e.details,
+            "type": e.event_type,
+            "day": e.sim_day,
+            "details": json.loads(e.detail) if e.detail else {},
         }
         for e in session.query(Event).all()
     ]
@@ -460,8 +577,8 @@ def import_state(
         ManufacturingOrder, PurchaseOrder, Event,
         SimulationState,
     )
+    from src.models.common import OrderState
     from src.models import (
-        OrderStatus, PurchaseOrderStatus,
         EventType, ProductType,
     )
     from src.database import engine
@@ -519,7 +636,7 @@ def import_state(
             id=mo_data["id"],
             product_id=mo_data["product_id"],
             quantity=mo_data["qty"],
-            status=OrderStatus(mo_data["status"]),
+            status=OrderState(mo_data["status"]),
             created_date=mo_data["created"],
             start_date=mo_data["start"],
             completed_date=mo_data["completed"],
@@ -529,12 +646,14 @@ def import_state(
     for po_data in state.get("purchase_orders", []):
         session.add(PurchaseOrder(
             id=po_data["id"],
-            supplier_id=po_data["supplier_id"],
+            supplier_id=po_data.get("supplier_id"),
+            provider_name=po_data.get("provider_name"),
+            provider_order_id=po_data.get("provider_order_id"),
             product_id=po_data["product_id"],
             quantity=po_data["qty"],
             issue_date=po_data["issue"],
             expected_delivery=po_data["expected"],
-            status=PurchaseOrderStatus(
+            status=OrderState(
                 po_data["status"]
             ),
         ))
@@ -543,9 +662,9 @@ def import_state(
     for e_data in state.get("events", []):
         session.add(Event(
             id=e_data["id"],
-            type=EventType(e_data["type"]),
-            sim_date=e_data["day"],
-            details=e_data["details"],
+            event_type=e_data["type"],
+            sim_day=e_data["day"],
+            detail=json.dumps(e_data["details"]) if "details" in e_data else None,
         ))
 
     session.commit()

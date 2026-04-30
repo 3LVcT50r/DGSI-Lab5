@@ -1,0 +1,144 @@
+{
+  "products": [
+    {
+      "name": "kit_piezas",
+      "description": "Frame parts kit",
+      "lead_time_days": 3,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 90.0
+        },
+        {
+          "min_qty": 10,
+          "price": 85.0
+        },
+        {
+          "min_qty": 50,
+          "price": 80.0
+        }
+      ],
+      "initial_stock": 100
+    },
+    {
+      "name": "pcb",
+      "description": "Main control board",
+      "lead_time_days": 3,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 40.0
+        },
+        {
+          "min_qty": 20,
+          "price": 32.0
+        },
+        {
+          "min_qty": 200,
+          "price": 25.0
+        }
+      ],
+      "initial_stock": 430
+    },
+    {
+      "name": "pcb_ref",
+      "description": "Refined control board",
+      "lead_time_days": 3,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 15.0
+        },
+        {
+          "min_qty": 50,
+          "price": 10.0
+        }
+      ],
+      "initial_stock": 300
+    },
+    {
+      "name": "extrusor",
+      "description": "Hot-end extruder",
+      "lead_time_days": 4,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 60.0
+        },
+        {
+          "min_qty": 10,
+          "price": 50.0
+        },
+        {
+          "min_qty": 100,
+          "price": 35.0
+        }
+      ],
+      "initial_stock": 200
+    },
+    {
+      "name": "sensor_autonivel",
+      "description": "Auto-leveling sensor",
+      "lead_time_days": 2,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 20.0
+        },
+        {
+          "min_qty": 10,
+          "price": 15.0
+        }
+      ],
+      "initial_stock": 200
+    },
+    {
+      "name": "cables_conexion",
+      "description": "Connection cables",
+      "lead_time_days": 1,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 5.0
+        },
+        {
+          "min_qty": 50,
+          "price": 2.0
+        }
+      ],
+      "initial_stock": 1000
+    },
+    {
+      "name": "transformador_24v",
+      "description": "24V Transformer",
+      "lead_time_days": 3,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 25.0
+        },
+        {
+          "min_qty": 10,
+          "price": 18.0
+        }
+      ],
+      "initial_stock": 150
+    },
+    {
+      "name": "enchufe_schuko",
+      "description": "Schuko plug",
+      "lead_time_days": 2,
+      "pricing": [
+        {
+          "min_qty": 1,
+          "price": 5.0
+        },
+        {
+          "min_qty": 20,
+          "price": 3.5
+        }
+      ],
+      "initial_stock": 400
+    }
+  ]
+}
