@@ -160,15 +160,15 @@ DGSI-Lab5/
 | Area | Status | Notes |
 |------|--------|-------|
 | PRD | ✅ Done | `prd.md` complete |
-| Project Setup | ⏳ Pending | Need to create requirements.txt, folder structure |
-| Database Schema | ⏳ Pending | Define SQLAlchemy models |
-| Configuration | ⏳ Pending | Default BOM, suppliers, demand params |
-| Simulation Engine | ⏳ Pending | SimPy or turn-based implementation |
-| API Layer | ⏳ Pending | REST endpoints |
-| UI Dashboard | ⏳ Pending | Streamlit interface |
-| Tests | ⏳ Pending | Unit + integration |
+| Project Setup | ✅ Done | Folder structure and `requirements.txt` ready |
+| Database Schema | ✅ Done | SQLAlchemy models implemented (with `SimulationState` for turn-based clock) |
+| Configuration | ✅ Done | Expanded `default_config.json` with BOM, suppliers, and demand parameters |
+| Simulation Engine | ✅ Done | Turn-based implementation (1 day = 1 cycle) using `advance_day()` |
+| API Layer | ✅ Done | 20+ REST endpoints completed (Swagger at `/docs`) |
+| UI Dashboard | ✅ Done | Streamlit interface operational with interactive forms and Matplotlib chart |
+| Tests & Polish | ⏳ Pending | Basic scaffold exists, but full unit/integration tests and Import logic are pending |
 
-**Next Up:** Initialize project structure with `requirements.txt` and base folders. Then implement database models matching the schema in PRD.
+**Next Up:** **Phase 6: Polish & Testing**. The focus shifts to implementing robust unit and integration tests for the API/services, finalizing the `import_state` functionality (JSON state injection), and refining project documentation.
 
 ## Example Production Plan
 
