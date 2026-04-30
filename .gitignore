@@ -3,3 +3,7 @@
 venv/*
 *.sqlite
 __pycache__/*
+.pytest_cache/*
+*.pyc
+.coverage
+.pytest_cache
