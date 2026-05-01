@@ -10,6 +10,23 @@ from src.models.purchase_order import PurchaseOrder
 
 app = typer.Typer(help="Manufacturer CLI")
 
+@app.command("init")
+def init_db():
+    """Initialize and seed the manufacturer database."""
+    from src.models.base import Base
+    from src.database import engine, SessionLocal
+    from src.services.seed import seed_database_from_config
+    from src.config import Settings
+    
+    settings = Settings()
+    typer.echo("Creating tables...")
+    Base.metadata.create_all(bind=engine)
+    
+    typer.echo("Seeding database...")
+    with SessionLocal() as session:
+        seed_database_from_config(session, str(settings.default_config_path))
+    typer.echo("Database initialized successfully.")
+
 suppliers_app = typer.Typer()
 app.add_typer(suppliers_app, name="suppliers", help="Manage network suppliers")
 
