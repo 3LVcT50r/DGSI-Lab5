@@ -24,9 +24,10 @@ class BOMRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class SupplierRead(SupplierBase):
+class SupplierRead(BaseModel):
     """Supplier response."""
-    id: int
+    name: str
+    url: str
     model_config = ConfigDict(from_attributes=True)
 
 

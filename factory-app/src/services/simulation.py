@@ -10,6 +10,7 @@ sequentially within each day cycle.
 import json
 import logging
 import random
+import requests
 from typing import Any, Dict
 
 from sqlalchemy.orm import Session
@@ -133,26 +134,28 @@ async def advance_day(session: Session) -> Dict[str, Any]:
         "capacity_per_day",
         settings.production_capacity_per_day,
     )
+    manufacturer = config.get(
+        "manufacturer",
+        {"port": 8002, "providers": [{"name": "ChipSupply Co", "url": "http://localhost:8001"}]}
+    )
 
     # 2. Process purchase arrivals
-    arriving_pos = session.query(PurchaseOrder).filter(
-        PurchaseOrder.status == PurchaseOrderStatus.OPEN,
-        PurchaseOrder.expected_delivery <= today,
-    ).with_for_update().all()
-
+    arriving_pos = requests.get(
+            f"{manufacturer['providers'][0]['url']}/api/v1/orders?status=delivered"
+        ).json()
     for po in arriving_pos:
         receive_purchase_order(
-            session, po.product_id, po.quantity
+            session, po["product_id"], po["quantity"]
         )
-        po.status = PurchaseOrderStatus.RECEIVED
+        po["status"] = PurchaseOrderStatus.RECEIVED
         log_event(
             session,
             EventType.PO_RECEIVED,
             today,
             {
-                "po_id": po.id,
-                "product_id": po.product_id,
-                "qty": po.quantity,
+                "po_id": po["id"],
+                "product_id": po["product_id"],
+                "qty": po["quantity"],
             },
         )
 

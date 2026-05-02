@@ -1,4 +1,6 @@
 from typing import Any, Dict, List
+
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import httpx
@@ -72,7 +74,15 @@ async def get_catalog(settings: Settings = Depends(get_settings)):
 def get_suppliers(db: Session = Depends(get_db_session)):
     """List all suppliers (legacy, now returns empty)."""
     # Since we now use provider, this might be deprecated
-    return []
+    settings = Settings()
+    with open(settings.default_config_path, "r") as f:
+        config = json.load(f)
+
+    manufacturer = config.get(
+        "manufacturer",
+        {"port": 8002, "providers": [{"name": "ChipSupply Co", "url": "http://localhost:8001"}]}
+    )
+    return manufacturer["providers"]
 
 
 @router.get("/suppliers/{supplier_id}/catalog",

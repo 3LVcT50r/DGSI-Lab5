@@ -106,6 +106,7 @@ st.sidebar.header(f"📅 Day: {current_day}")
 
 if st.sidebar.button("▶️ Advance Day"):
     post_data("simulate/advance")
+    post_data_provider("day/advance")
     refresh()
 
 if st.sidebar.button("🔄 Reset Simulation"):
@@ -115,40 +116,54 @@ if st.sidebar.button("🔄 Reset Simulation"):
 st.sidebar.markdown("---")
 st.sidebar.header("Purchasing (Raw Materials)")
 
-catalog = fetch_data_provider("catalog")
-if catalog:
-    # Flatten catalog items
-    catalog_options = {}
-    for item in catalog:
-        product = item["product"]
-        for tier in item["pricing_tiers"]:
-            label = f"{product['name']} - Qty {tier['min_quantity']}+ @ ${tier['price']}"
-            catalog_options[label] = {
-                "product_id": product["id"],
-                "min_quantity": tier["min_quantity"],
-                "price": tier["price"],
-            }
-
-    selected_item_label = st.sidebar.selectbox(
-        "Product", list(catalog_options.keys())
+suppliers = fetch_data("suppliers")
+if suppliers:
+    unique_supp_names = list(
+        set([s["name"] for s in suppliers])
     )
-    selected_item = catalog_options[selected_item_label]
-
-    min_qty = selected_item["min_quantity"]
-    qty = st.sidebar.number_input(
-        "Quantity",
-        min_value=min_qty,
-        value=min_qty,
-        step=1,
+    selected_supp_name = st.sidebar.selectbox(
+        "Supplier Name", unique_supp_names
     )
 
-    if st.sidebar.button("Issue PO"):
-        post_data_provider("orders", {
-            "supplier_id": 1,  # Dummy, since we don't use suppliers anymore
-            "product_id": selected_item["product_id"],
-            "quantity": qty,
-        })
-        refresh()
+    supp_items = [
+        s for s in suppliers
+        if s["name"] == selected_supp_name
+    ]
+
+    catalog = fetch_data_provider("catalog")
+    if catalog:
+        # Flatten catalog items
+        catalog_options = {}
+        for item in catalog:
+            product = item["product"]
+            for tier in item["pricing_tiers"]:
+                label = f"{product['name']} - Qty {tier['min_quantity']}+ @ ${tier['price']}"
+                catalog_options[label] = {
+                    "product_id": product["id"],
+                    "min_quantity": tier["min_quantity"],
+                    "price": tier["price"],
+                }
+
+        selected_item_label = st.sidebar.selectbox(
+            "Product", list(catalog_options.keys())
+        )
+        selected_item = catalog_options[selected_item_label]
+
+        min_qty = selected_item["min_quantity"]
+        qty = st.sidebar.number_input(
+            "Quantity",
+            min_value=min_qty,
+            value=min_qty,
+            step=1,
+        )
+
+        if st.sidebar.button("Issue PO"):
+            post_data_provider("orders", {
+                "supplier_id": 1,  # Dummy, since we don't use suppliers anymore
+                "product_id": selected_item["product_id"],
+                "quantity": qty,
+            })
+            refresh()
 
 # --- Main Layout ---
 col1, col2 = st.columns(2)

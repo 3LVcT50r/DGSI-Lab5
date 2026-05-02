@@ -36,7 +36,7 @@ def get_orders(session: Session, status: Optional[str] = None) -> List[OrderRead
     """Get orders, optionally filtered by status."""
     query = session.query(Order)
     if status:
-        query = query.filter(Order.status == status)
+        query = query.filter(Order.status == OrderStatus(status))
     orders = query.all()
     return [OrderRead.from_orm(order) for order in orders]
 
@@ -61,10 +61,8 @@ def calculate_price(session: Session, product_id: int, quantity: float) -> float
 
 def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
     """Place a new order."""
-    # Check stock
-    stock = session.query(Stock).filter(Stock.product_id == order_data.product_id).first()
-    if not stock or stock.quantity < order_data.quantity:
-        raise ValueError("Insufficient stock")
+    
+    
 
     # Get product for lead time
     product = session.query(Product).filter(Product.id == order_data.product_id).first()
@@ -82,7 +80,7 @@ def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
     order = Order(
         product_id=order_data.product_id,
         quantity=order_data.quantity,
-        status=OrderStatus.CONFIRMED,
+        status=OrderStatus.PENDING,
         expected_delivery_day=current_day + product.lead_time_days,
         total_price=total_price
     )
@@ -98,7 +96,7 @@ def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
         event_type="order_placed",
         entity_type="order",
         entity_id=order.id,
-        detail=f"Order placed for {order_data.quantity} units of product {order_data.product_id}"
+        detail=f"Order placed for {order_data.quantity} units of product {order_data.product_id}, product is pending stock review"
     )
     session.add(event)
 
@@ -114,19 +112,48 @@ def advance_day(session: Session) -> int:
         session.add(sim_state)
     current_day = sim_state.current_day + 1
     sim_state.current_day = current_day
+    
+    
 
     # Move confirmed orders to in progress
-    confirmed_orders = session.query(Order).filter(Order.status == OrderStatus.CONFIRMED).all()
-    for order in confirmed_orders:
-        order.status = OrderStatus.IN_PROGRESS
+    orders_to_deliver = session.query(Order).filter(
+        and_(Order.status == OrderStatus.DELIVERED, Order.expected_delivery_day <= current_day)
+    ).all()
+
+    for order in orders_to_deliver:
+        session.delete(order)
         event = Event(
             sim_day=current_day,
-            event_type="order_started",
+            event_type="order_finished",
             entity_type="order",
             entity_id=order.id,
-            detail=f"Order {order.id} started processing"
+            detail=f"Order {order.id} finished, has been delivered"
         )
         session.add(event)
+    
+    confirmed_orders = session.query(Order).filter(Order.status == OrderStatus.CONFIRMED).all()
+    for order in confirmed_orders:
+        # Check stock
+        stock = session.query(Stock).filter(Stock.product_id == order.product_id).first()
+        if stock and stock.quantity >= order.quantity:
+            order.status = OrderStatus.IN_PROGRESS
+            event = Event(
+                sim_day=current_day,
+                event_type="order_started",
+                entity_type="order",
+                entity_id=order.id,
+                detail=f"Order {order.id} started processing"
+            )
+            session.add(event)
+        else:
+            event = Event(
+                sim_day=current_day,
+                event_type="order_pending_stock",
+                entity_type="order",
+                entity_id=order.id,
+                detail=f"Order {order.id} pending stock, cannot start"
+            )
+            session.add(event)
 
     # Process orders
     orders_to_ship = session.query(Order).filter(
@@ -140,7 +167,22 @@ def advance_day(session: Session) -> int:
             event_type="order_shipped",
             entity_type="order",
             entity_id=order.id,
-            detail=f"Order {order.id} shipped"
+            detail=f"Order {order.id} ready and shipped"
+        )
+        session.add(event)
+        
+    orders_to_deliver = session.query(Order).filter(
+        and_(Order.status == OrderStatus.SHIPPED, Order.expected_delivery_day <= current_day)
+    ).all()
+
+    for order in orders_to_deliver:
+        order.status = OrderStatus.DELIVERED
+        event = Event(
+            sim_day=current_day,
+            event_type="order_delivered",
+            entity_type="order",
+            entity_id=order.id,
+            detail=f"Order {order.id} delivered"
         )
         session.add(event)
 
