@@ -1,12 +1,19 @@
 from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import httpx
 
 from src.database import get_db_session
 from src.schemas.response import PurchaseOrderRead, SupplierRead
+from src.schemas.request import PurchaseOrderCreate
 from src.models.purchase_order import PurchaseOrder
 from src.models.supplier import Supplier
 from src.services.simulation import create_purchase_order
+from src.services.provider import get_provider_service
+from src.config import Settings
+
+def get_settings() -> Settings:
+    return Settings()
 
 router = APIRouter()
 
@@ -19,16 +26,18 @@ def get_purchase_orders(db: Session = Depends(get_db_session)):
 
 
 @router.post("/purchase-orders", response_model=PurchaseOrderRead)
-def post_purchase_order(
-        payload: Dict[str, Any], db: Session = Depends(get_db_session)):
+async def post_purchase_order(
+        po_data: PurchaseOrderCreate, db: Session = Depends(get_db_session),
+        settings: Settings = Depends(get_settings)):
     """Create a new purchase order."""
     try:
-        return create_purchase_order(
+        return await create_purchase_order(
             db,
-            supplier_id=payload.get("supplier_id"),
-            product_id=payload.get("product_id"),
-            quantity=payload.get("quantity"),
-            expected_delivery=payload.get("expected_delivery", 0),
+            settings,
+            supplier_id=po_data.supplier_id,
+            product_id=po_data.product_id,
+            quantity=po_data.quantity,
+            expected_delivery=0,  # Not used anymore
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -48,16 +57,28 @@ def cancel_purchase_order(po_id: int, db: Session = Depends(get_db_session)):
     return {"status": "cancelled"}
 
 
+@router.get("/catalog")
+async def get_catalog(settings: Settings = Depends(get_settings)):
+    """Get the product catalog from provider."""
+    provider_service = get_provider_service(settings)
+    try:
+        catalog = await provider_service.get_catalog()
+        return catalog
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=500, detail=f"Provider error: {exc}")
+
+
 @router.get("/suppliers", response_model=List[SupplierRead])
 def get_suppliers(db: Session = Depends(get_db_session)):
-    """List all suppliers."""
-    return db.query(Supplier).all()
+    """List all suppliers (legacy, now returns empty)."""
+    # Since we now use provider, this might be deprecated
+    return []
 
 
 @router.get("/suppliers/{supplier_id}/catalog",
             response_model=List[SupplierRead])
 def get_supplier_catalog(supplier_id: int,
                          db: Session = Depends(get_db_session)):
-    """Get catalog for a supplier."""
-    items = db.query(Supplier).filter(Supplier.id == supplier_id).all()
-    return items
+    """Get catalog for a supplier (legacy)."""
+    # Deprecated
+    return []

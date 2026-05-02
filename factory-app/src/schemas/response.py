@@ -57,6 +57,7 @@ class PurchaseOrderRead(BaseModel):
     issue_date: int
     expected_delivery: int
     status: str
+    provider_order_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 

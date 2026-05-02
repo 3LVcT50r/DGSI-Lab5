@@ -26,6 +26,7 @@ class PurchaseOrder(Base):
         default=PurchaseOrderStatus.OPEN,
         nullable=False,
     )
+    provider_order_id = Column(Integer, nullable=True)  # ID from provider app
 
     supplier = relationship("Supplier")
     product = relationship("Product")

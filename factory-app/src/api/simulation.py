@@ -27,11 +27,11 @@ def read_simulation_status(
 
 
 @router.post("/simulate/advance")
-def post_advance_day(
+async def post_advance_day(
     db: Session = Depends(get_db_session),
 ):
     """Advance the simulated calendar by one day."""
-    return advance_day(db)
+    return await advance_day(db)
 
 
 @router.post("/simulate/reset")

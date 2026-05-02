@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 API_URL = "http://localhost:8000/api/v1"
+PROVIDER_API_URL = "http://localhost:8001/api/v1"
 
 st.set_page_config(
     page_title="3D Printer Factory Simulator",
@@ -22,6 +23,18 @@ def fetch_data(endpoint: str):
     except Exception as e:
         st.error(f"Error fetching {endpoint}: {e}")
         return None
+    
+def fetch_data_provider(endpoint: str):
+    """GET data from the API."""
+    try:
+        response = requests.get(
+            f"{PROVIDER_API_URL}/{endpoint}"
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Error fetching {endpoint}: {e}")
+        return None
 
 
 def post_data(endpoint: str, json_data=None):
@@ -29,6 +42,25 @@ def post_data(endpoint: str, json_data=None):
     try:
         response = requests.post(
             f"{API_URL}/{endpoint}", json=json_data
+        )
+        response.raise_for_status()
+        st.success(f"Success: {endpoint}")
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        error_msg = e.response.json().get(
+            "detail", str(e)
+        )
+        st.error(f"Error: {error_msg}")
+        return None
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+    
+def post_data_provider(endpoint: str, json_data=None):
+    """POST data to the API."""
+    try:
+        response = requests.post(
+            f"{PROVIDER_API_URL}/{endpoint}", json=json_data
         )
         response.raise_for_status()
         st.success(f"Success: {endpoint}")
@@ -83,34 +115,26 @@ if st.sidebar.button("🔄 Reset Simulation"):
 st.sidebar.markdown("---")
 st.sidebar.header("Purchasing (Raw Materials)")
 
-suppliers = fetch_data("suppliers")
-if suppliers:
-    unique_supp_names = list(
-        set([s["name"] for s in suppliers])
-    )
-    selected_supp_name = st.sidebar.selectbox(
-        "Supplier Name", unique_supp_names
-    )
-
-    supp_items = [
-        s for s in suppliers
-        if s["name"] == selected_supp_name
-    ]
-
-    item_options = {}
-    for s in supp_items:
-        prod_name = product_map.get(
-            s["product_id"], "Unknown"
-        )
-        label = f"{prod_name} (${s['unit_cost']})"
-        item_options[label] = s
+catalog = fetch_data_provider("catalog")
+if catalog:
+    # Flatten catalog items
+    catalog_options = {}
+    for item in catalog:
+        product = item["product"]
+        for tier in item["pricing_tiers"]:
+            label = f"{product['name']} - Qty {tier['min_quantity']}+ @ ${tier['price']}"
+            catalog_options[label] = {
+                "product_id": product["id"],
+                "min_quantity": tier["min_quantity"],
+                "price": tier["price"],
+            }
 
     selected_item_label = st.sidebar.selectbox(
-        "Product", list(item_options.keys())
+        "Product", list(catalog_options.keys())
     )
-    selected_item = item_options[selected_item_label]
+    selected_item = catalog_options[selected_item_label]
 
-    min_qty = selected_item.get("min_order_qty", 1)
+    min_qty = selected_item["min_quantity"]
     qty = st.sidebar.number_input(
         "Quantity",
         min_value=min_qty,
@@ -119,8 +143,8 @@ if suppliers:
     )
 
     if st.sidebar.button("Issue PO"):
-        post_data("purchase-orders", {
-            "supplier_id": selected_item["id"],
+        post_data_provider("orders", {
+            "supplier_id": 1,  # Dummy, since we don't use suppliers anymore
             "product_id": selected_item["product_id"],
             "quantity": qty,
         })
@@ -161,7 +185,7 @@ with col1:
         st.info("No pending orders.")
 
     st.markdown("### 🛠 Open Purchase Orders")
-    open_pos = status.get("open_purchase_orders", [])
+    open_pos = fetch_data_provider("orders")
     if open_pos:
         df_pos = pd.DataFrame(open_pos)
         df_pos["Product"] = (
@@ -170,7 +194,7 @@ with col1:
         st.dataframe(
             df_pos[[
                 "id", "Product", "quantity",
-                "expected_delivery", "status",
+                "expected_delivery_day", "status",
             ]],
             use_container_width=True,
         )

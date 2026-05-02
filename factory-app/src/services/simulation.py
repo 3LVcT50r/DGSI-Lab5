@@ -14,6 +14,7 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 from src.config import Settings
+from src.services.provider import get_provider_service
 from src.models import (
     SimulationState,
     ManufacturingOrder,
@@ -110,7 +111,7 @@ def generate_demand(
             )
 
 
-def advance_day(session: Session) -> Dict[str, Any]:
+async def advance_day(session: Session) -> Dict[str, Any]:
     """Advance the simulation calendar by one day."""
     settings = Settings()
     state = session.query(
@@ -223,6 +224,35 @@ def advance_day(session: Session) -> Dict[str, Any]:
     # 5. Generate demand for next simulation cycle
     generate_demand(session, today, settings)
 
+    # 6. Advance provider day and check for deliveries
+    provider_service = get_provider_service(settings)
+    try:
+        await provider_service.advance_day()
+        # Get all orders from provider that are delivered
+        provider_orders = await provider_service.get_orders(status="Delivered")
+        for provider_order in provider_orders:
+            # Find local PO with this provider_order_id
+            local_po = session.query(PurchaseOrder).filter(
+                PurchaseOrder.provider_order_id == provider_order["id"]
+            ).first()
+            if local_po and local_po.status == PurchaseOrderStatus.OPEN:
+                # Receive the materials
+                receive_purchase_order(session, local_po.product_id, local_po.quantity)
+                local_po.status = PurchaseOrderStatus.RECEIVED
+                log_event(
+                    session,
+                    EventType.PO_RECEIVED,
+                    today,
+                    {
+                        "po_id": local_po.id,
+                        "provider_order_id": provider_order["id"],
+                        "product_id": local_po.product_id,
+                        "qty": local_po.quantity,
+                    },
+                )
+    except Exception as exc:
+        logger.warning(f"Failed to advance provider or check deliveries: {exc}")
+
     session.commit()
     return {"status": "advanced", "current_day": today}
 
@@ -319,36 +349,35 @@ def release_order(
         )
 
 
-def create_purchase_order(
+async def create_purchase_order(
     session: Session,
+    settings: Settings,
     supplier_id: int,
     product_id: int,
     quantity: int,
     expected_delivery: int,
 ) -> PurchaseOrderRead:
-    """Issue a purchase order for raw materials."""
-    from src.models import Supplier
-    supp = session.query(Supplier).filter(
-        Supplier.id == supplier_id
-    ).first()
-    if not supp:
-        raise ValueError("Supplier not found.")
-    if quantity < supp.min_order_qty:
-        raise ValueError(
-            f"Quantity {quantity} below minimum "
-            f"order quantity {supp.min_order_qty}"
-        )
+    """Issue a purchase order for raw materials by calling the provider."""
+    provider_service = get_provider_service(settings)
+    
+    # Place order with provider
+    try:
+        provider_order = await provider_service.place_order(product_id, quantity)
+    except Exception as exc:
+        raise ValueError(f"Failed to place order with provider: {exc}")
 
     day = get_current_day(session)
-    actual_expected_delivery = day + supp.lead_time_days
+    # Use the expected_delivery from provider
+    actual_expected_delivery = provider_order["expected_delivery_day"]
 
     po = PurchaseOrder(
-        supplier_id=supplier_id,
+        supplier_id=supplier_id,  # Keep for compatibility, maybe set to 1
         product_id=product_id,
         quantity=quantity,
         issue_date=day,
         expected_delivery=actual_expected_delivery,
         status=PurchaseOrderStatus.OPEN,
+        provider_order_id=provider_order["id"],
     )
     session.add(po)
     session.flush()
@@ -357,7 +386,8 @@ def create_purchase_order(
         session, EventType.PO_CREATED, day,
         {
             "po_id": po.id,
-            "supplier": supplier_id,
+            "provider_order_id": provider_order["id"],
+            "product_id": product_id,
             "qty": quantity,
         },
     )

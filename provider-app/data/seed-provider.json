@@ -1,0 +1,37 @@
+{
+  "products": [
+    {
+      "name": "PCB Controller",
+      "description": "Main control board for 3D printer",
+      "lead_time_days": 2,
+      "initial_stock": 50,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 25.0},
+        {"min_quantity": 10, "price": 22.0},
+        {"min_quantity": 50, "price": 20.0}
+      ]
+    },
+    {
+      "name": "Extruder Assembly",
+      "description": "Complete extruder unit",
+      "lead_time_days": 3,
+      "initial_stock": 30,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 45.0},
+        {"min_quantity": 5, "price": 42.0},
+        {"min_quantity": 20, "price": 40.0}
+      ]
+    },
+    {
+      "name": "Power Supply 24V",
+      "description": "24V power supply unit",
+      "lead_time_days": 1,
+      "initial_stock": 100,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 15.0},
+        {"min_quantity": 25, "price": 13.0},
+        {"min_quantity": 100, "price": 12.0}
+      ]
+    }
+  ]
+}
