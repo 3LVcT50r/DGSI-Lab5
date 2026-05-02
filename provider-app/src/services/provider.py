@@ -1,5 +1,6 @@
 """Business logic for the provider app."""
 
+import json
 import logging
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -62,7 +63,9 @@ def calculate_price(session: Session, product_id: int, quantity: float) -> float
 def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
     """Place a new order."""
     
-    
+    if order_data.quantity < 0:
+        raise ValueError("Quantity must be non-negative")
+
 
     # Get product for lead time
     product = session.query(Product).filter(Product.id == order_data.product_id).first()
@@ -88,7 +91,7 @@ def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
     session.flush()
 
     # Reduce stock
-    stock.quantity -= order_data.quantity
+    
 
     # Log event
     event = Event(
@@ -136,6 +139,7 @@ def advance_day(session: Session) -> int:
         # Check stock
         stock = session.query(Stock).filter(Stock.product_id == order.product_id).first()
         if stock and stock.quantity >= order.quantity:
+            stock.quantity -= order.quantity
             order.status = OrderStatus.IN_PROGRESS
             event = Event(
                 sim_day=current_day,
@@ -249,4 +253,77 @@ def restock(session: Session, product_id: int, quantity: float):
         detail=f"Stock updated for product {product_id}, added {quantity} units"
     )
     session.add(event)
+    session.commit()
+
+
+def export_state(session: Session) -> str:
+    """Export the current state to JSON."""
+    products = session.query(Product).all()
+    pricing_tiers = session.query(PricingTier).all()
+    stocks = session.query(Stock).all()
+    orders = session.query(Order).all()
+    events = session.query(Event).all()
+    sim_state = session.query(SimState).first()
+
+    data = {
+        "products": [p.__dict__ for p in products],
+        "pricing_tiers": [pt.__dict__ for pt in pricing_tiers],
+        "stocks": [s.__dict__ for s in stocks],
+        "orders": [o.__dict__ for o in orders],
+        "events": [e.__dict__ for e in events],
+        "sim_state": sim_state.__dict__ if sim_state else None
+    }
+
+    # Remove SQLAlchemy internal keys
+    for key in data:
+        if isinstance(data[key], list):
+            for item in data[key]:
+                item.pop('_sa_instance_state', None)
+        elif data[key]:
+            data[key].pop('_sa_instance_state', None)
+
+    return json.dumps(data, indent=2, default=str)
+
+
+def import_state(session: Session, json_str: str):
+    """Import state from JSON."""
+    data = json.loads(json_str)
+
+    # Clear existing data
+    session.query(Event).delete()
+    session.query(Order).delete()
+    session.query(Stock).delete()
+    session.query(PricingTier).delete()
+    session.query(Product).delete()
+    session.query(SimState).delete()
+    session.commit()
+
+    # Insert new data
+    for p in data.get("products", []):
+        p.pop('id', None)  # Remove id to let DB assign
+        session.add(Product(**p))
+
+    session.commit()  # Commit to get IDs
+
+    for pt in data.get("pricing_tiers", []):
+        pt.pop('id', None)
+        session.add(PricingTier(**pt))
+
+    for s in data.get("stocks", []):
+        s.pop('id', None)
+        session.add(Stock(**s))
+
+    for o in data.get("orders", []):
+        o.pop('id', None)
+        session.add(Order(**o))
+
+    for e in data.get("events", []):
+        e.pop('id', None)
+        session.add(Event(**e))
+
+    if data.get("sim_state"):
+        ss = data["sim_state"]
+        ss.pop('id', None)
+        session.add(SimState(**ss))
+
     session.commit()

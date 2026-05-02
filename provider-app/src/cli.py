@@ -9,7 +9,7 @@ from .services.seed import seed_database_from_config
 from .services.provider import (
     get_catalog, get_stock, get_orders, get_order,
     place_order, advance_day, get_current_day,
-    set_price, restock
+    set_price, restock, export_state, import_state
 )
 from .schemas.request import OrderCreate
 from .config import Settings
@@ -32,30 +32,51 @@ class _TyperStub:
         parser = argparse.ArgumentParser(description="3D Printer Provider Simulator CLI")
         subparsers = parser.add_subparsers(dest="command", required=True)
 
+        # catalog
         subparsers.add_parser("catalog", help="List the product catalog")
-        subparsers.add_parser("stock", help="List current stock levels")
 
-        orders_parser = subparsers.add_parser("orders", help="List orders")
-        orders_parser.add_argument("--status", type=str, help="Filter by status")
+        # stock
+        subparsers.add_parser("stock", help="Show current inventory")
 
-        order_show_parser = subparsers.add_parser("orders_show", help="Show details of a specific order")
-        order_show_parser.add_argument("order_id", type=int)
+        # orders
+        orders_parser = subparsers.add_parser("orders", help="Manage orders")
+        orders_sub = orders_parser.add_subparsers(dest="orders_command", required=True)
+        list_parser = orders_sub.add_parser("list", help="List all orders")
+        list_parser.add_argument("--status", type=str, help="Filter by status")
+        show_parser = orders_sub.add_parser("show", help="Show details of a specific order")
+        show_parser.add_argument("order_id", type=int)
 
-        price_set_parser = subparsers.add_parser("price_set", help="Set pricing tier for a product")
-        price_set_parser.add_argument("product_id", type=int)
-        price_set_parser.add_argument("min_quantity", type=int)
-        price_set_parser.add_argument("price", type=float)
+        # price
+        price_parser = subparsers.add_parser("price", help="Manage pricing")
+        price_sub = price_parser.add_subparsers(dest="price_command", required=True)
+        set_parser = price_sub.add_parser("set", help="Set pricing tier for a product")
+        set_parser.add_argument("product", type=int)
+        set_parser.add_argument("tier", type=int)
+        set_parser.add_argument("price", type=float)
 
+        # restock
         restock_parser = subparsers.add_parser("restock", help="Add stock to a product")
-        restock_parser.add_argument("product_id", type=int)
+        restock_parser.add_argument("product", type=int)
         restock_parser.add_argument("quantity", type=float)
 
-        subparsers.add_parser("day_advance", help="Advance the simulation by one day")
-        subparsers.add_parser("day_current", help="Show the current simulated day")
+        # day
+        day_parser = subparsers.add_parser("day", help="Manage simulation day")
+        day_sub = day_parser.add_subparsers(dest="day_command", required=True)
+        day_sub.add_parser("advance", help="Advance the simulation by one day")
+        day_sub.add_parser("current", help="Show the current simulation day")
 
+        # export
+        subparsers.add_parser("export", help="Export state to JSON")
+
+        # import
+        import_parser = subparsers.add_parser("import", help="Import state from JSON file")
+        import_parser.add_argument("file", help="JSON file to import")
+
+        # serve
         serve_parser = subparsers.add_parser("serve", help="Start the FastAPI server")
         serve_parser.add_argument("--port", type=int, default=8001)
 
+        # init_db
         subparsers.add_parser("init_db", help="Initialize the database and seed with data")
 
         args = parser.parse_args()
@@ -65,17 +86,24 @@ class _TyperStub:
         elif args.command == "stock":
             stock()
         elif args.command == "orders":
-            orders(args.status)
-        elif args.command == "orders_show":
-            order_show(args.order_id)
-        elif args.command == "price_set":
-            price_set(args.product_id, args.min_quantity, args.price)
+            if args.orders_command == "list":
+                orders(getattr(args, 'status', None))
+            elif args.orders_command == "show":
+                order_show(args.order_id)
+        elif args.command == "price":
+            if args.price_command == "set":
+                price_set(args.product, args.tier, args.price)
         elif args.command == "restock":
-            restock_cmd(args.product_id, args.quantity)
-        elif args.command == "day_advance":
-            day_advance()
-        elif args.command == "day_current":
-            day_current()
+            restock_cmd(args.product, args.quantity)
+        elif args.command == "day":
+            if args.day_command == "advance":
+                day_advance()
+            elif args.day_command == "current":
+                day_current()
+        elif args.command == "export":
+            export()
+        elif args.command == "import":
+            import_cmd(args.file)
         elif args.command == "serve":
             serve(args.port)
         elif args.command == "init_db":
@@ -150,19 +178,19 @@ def order_show(order_id: int):
 
 
 @app.command()
-def price_set(product_id: int, min_quantity: int, price: float):
+def price_set(product: int, tier: int, price: float):
     """Set pricing tier for a product."""
     with SessionLocal() as session:
-        set_price(session, product_id, min_quantity, price)
-        typer.echo(f"Set price for product {product_id}, qty {min_quantity}+ to ${price:.2f}")
+        set_price(session, product, tier, price)
+        typer.echo(f"Set price for product {product}, qty {tier}+ to ${price:.2f}")
 
 
 @app.command()
-def restock_cmd(product_id: int, quantity: float):
+def restock_cmd(product: int, quantity: float):
     """Add stock to a product."""
     with SessionLocal() as session:
-        restock(session, product_id, quantity)
-        typer.echo(f"Added {quantity} units to product {product_id}")
+        restock(session, product, quantity)
+        typer.echo(f"Added {quantity} units to product {product}")
 
 
 @app.command()
@@ -195,6 +223,24 @@ def init_db():
     with SessionLocal() as session:
         seed_database_from_config(session, settings.default_seed_path)
     typer.echo("Database initialized and seeded.")
+
+
+@app.command()
+def export():
+    """Export state to JSON."""
+    with SessionLocal() as session:
+        state = export_state(session)
+        print(state)
+
+
+@app.command()
+def import_cmd(file: str):
+    """Import state from JSON file."""
+    with open(file) as f:
+        json_str = f.read()
+    with SessionLocal() as session:
+        import_state(session, json_str)
+    typer.echo("State imported.")
 
 
 if __name__ == "__main__":

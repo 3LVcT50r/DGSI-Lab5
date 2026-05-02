@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     warehouse_capacity: int = 500
     production_capacity_per_day: int = 10
     demand_seed: int | None = None
+    provider_url: str = "http://localhost:8001"
 
     model_config = {
         "env_file": ".env",

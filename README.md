@@ -52,12 +52,20 @@ Abre la primera terminal, asegúrate de activar tu entorno virtual (`source venv
 ```bash
 uvicorn src.main:app --port 8000
 ```
+Tambien se puede usar la cli para ejecutar el servidor:
+```
+./manufacturer-cli serve --port 8000
+```
+Y en otra terminal: 
+```
+./provider-cli serve --port 8001
+```
 > El backend quedará ejecutándose en segundo plano exponiendo todos sus servicios en el puerto 8000. Además, puedes interactuar directamente con toda su documentación Swagger en `http://localhost:8000/docs`. No la cierres.
 
 ### 2️⃣ Levantar el Panel Visual (Dashboard Frontend)
 Abre una **segunda terminal**, vuelve a activar el entorno y manda arrancar el renderizado web visual:
 ```bash
-streamlit run src/ui/app.py
+streamlit run factory-app/src/ui/app.py
 ```
 > Tu navegador abrirá automáticamente el panel visual en `http://localhost:8501`.
 
