@@ -6,7 +6,14 @@ from sqlalchemy.orm import Session
 from src.database import get_db_session
 from src.schemas.response import EventRead
 from src.models.event import Event
-from src.services.simulation import export_state, import_state
+from src.services.simulation import (
+    export_state,
+    import_state,
+    export_inventory,
+    export_events,
+    import_inventory,
+    import_events,
+)
 
 router = APIRouter()
 
@@ -23,13 +30,37 @@ def get_export_state(db: Session = Depends(get_db_session)):
     return export_state(db)
 
 
-@router.post("/state/import")
-def post_import_state(file: UploadFile = File(...),
-                      db: Session = Depends(get_db_session)):
-    """Import simulation state from uploaded JSON."""
+@router.get("/state/export/inventory")
+def get_export_inventory(db: Session = Depends(get_db_session)):
+    """Export current inventory state as JSON."""
+    return export_inventory(db)
+
+
+@router.get("/state/export/events")
+def get_export_events(db: Session = Depends(get_db_session)):
+    """Export event history as JSON."""
+    return export_events(db)
+
+
+@router.post("/state/import/inventory")
+def post_import_inventory(file: UploadFile = File(...),
+                          db: Session = Depends(get_db_session)):
+    """Import inventory state from uploaded JSON."""
     try:
         payload = file.file.read().decode("utf-8")
-        import_state(db, json.loads(payload))
-        return {"status": "imported"}
+        import_inventory(db, json.loads(payload))
+        return {"status": "inventory imported"}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/state/import/events")
+def post_import_events(file: UploadFile = File(...),
+                       db: Session = Depends(get_db_session)):
+    """Import event history from uploaded JSON."""
+    try:
+        payload = file.file.read().decode("utf-8")
+        import_events(db, json.loads(payload))
+        return {"status": "events imported"}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))

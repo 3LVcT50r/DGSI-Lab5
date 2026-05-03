@@ -11,13 +11,15 @@ logger = logging.getLogger(__name__)
 
 def seed_database_from_config(session: Session, config_path: Path):
     """Seed the DB with products, pricing, stock and state."""
-    if session.query(SimState).first():
-        logger.info("Database already seeded. Skipping.")
-        return
-
     logger.info("Seeding database from config: %s", config_path)
     with open(config_path, "r") as f:
         config_data = json.load(f)
+
+    # Clear existing data
+    session.query(Stock).delete()
+    session.query(PricingTier).delete()
+    session.query(Product).delete()
+    session.query(SimState).delete()
 
     # 1. Initialize SimState
     state = SimState(current_day=0)

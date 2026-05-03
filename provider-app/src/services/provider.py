@@ -61,27 +61,40 @@ def calculate_price(session: Session, product_id: int, quantity: float) -> float
 
 
 def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
-    """Place a new order."""
+    """Place a new order.
+    
+    Accepts either product_id (int) or product_name (str).
+    """
     
     if order_data.quantity < 0:
         raise ValueError("Quantity must be non-negative")
 
-
-    # Get product for lead time
-    product = session.query(Product).filter(Product.id == order_data.product_id).first()
-    if not product:
-        raise ValueError("Product not found")
+    # Resolve product_name to product_id if needed
+    product_id = order_data.product_id
+    if product_id is None:
+        # Resolve product name to ID
+        product = session.query(Product).filter(
+            Product.name.ilike(order_data.product_name)
+        ).first()
+        if not product:
+            raise ValueError(f"Product '{order_data.product_name}' not found")
+        product_id = product.id
+    else:
+        # Get product for lead time
+        product = session.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise ValueError("Product not found")
 
     # Get current day
     sim_state = session.query(SimState).first()
     current_day = sim_state.current_day if sim_state else 0
 
     # Calculate price
-    total_price = calculate_price(session, order_data.product_id, order_data.quantity)
+    total_price = calculate_price(session, product_id, order_data.quantity)
 
     # Create order
     order = Order(
-        product_id=order_data.product_id,
+        product_id=product_id,
         quantity=order_data.quantity,
         status=OrderStatus.PENDING,
         expected_delivery_day=current_day + product.lead_time_days,
@@ -119,11 +132,11 @@ def advance_day(session: Session) -> int:
     
 
     # Move confirmed orders to in progress
-    orders_to_deliver = session.query(Order).filter(
+    orders_to_finish = session.query(Order).filter(
         and_(Order.status == OrderStatus.DELIVERED, Order.expected_delivery_day <= current_day)
     ).all()
 
-    for order in orders_to_deliver:
+    for order in orders_to_finish:
         session.delete(order)
         event = Event(
             sim_day=current_day,
@@ -134,19 +147,19 @@ def advance_day(session: Session) -> int:
         )
         session.add(event)
     
-    confirmed_orders = session.query(Order).filter(Order.status == OrderStatus.CONFIRMED).all()
-    for order in confirmed_orders:
+    pending_orders = session.query(Order).filter(Order.status == OrderStatus.PENDING).all()
+    for order in pending_orders:
         # Check stock
         stock = session.query(Stock).filter(Stock.product_id == order.product_id).first()
         if stock and stock.quantity >= order.quantity:
             stock.quantity -= order.quantity
-            order.status = OrderStatus.IN_PROGRESS
+            order.status = OrderStatus.CONFIRMED
             event = Event(
                 sim_day=current_day,
                 event_type="order_started",
                 entity_type="order",
                 entity_id=order.id,
-                detail=f"Order {order.id} started processing"
+                detail=f"Order {order.id} has stock, confirmed"
             )
             session.add(event)
         else:
@@ -158,10 +171,24 @@ def advance_day(session: Session) -> int:
                 detail=f"Order {order.id} pending stock, cannot start"
             )
             session.add(event)
+            
+    orders_to_process = session.query(Order).filter(
+        Order.status == OrderStatus.CONFIRMED
+    ).all()
 
+    for order in orders_to_process:
+        order.status = OrderStatus.IN_PROGRESS
+        event = Event(
+            sim_day=current_day,
+            event_type="order_being_prepared",
+            entity_type="order",
+            entity_id=order.id,
+            detail=f"Order {order.id} in progress"
+        )
+        session.add(event)
     # Process orders
     orders_to_ship = session.query(Order).filter(
-        and_(Order.status == OrderStatus.IN_PROGRESS, Order.expected_delivery_day <= current_day)
+        Order.status == OrderStatus.IN_PROGRESS
     ).all()
 
     for order in orders_to_ship:
@@ -176,19 +203,20 @@ def advance_day(session: Session) -> int:
         session.add(event)
         
     orders_to_deliver = session.query(Order).filter(
-        and_(Order.status == OrderStatus.SHIPPED, Order.expected_delivery_day <= current_day)
+        Order.status == OrderStatus.SHIPPED
     ).all()
 
     for order in orders_to_deliver:
-        order.status = OrderStatus.DELIVERED
-        event = Event(
-            sim_day=current_day,
-            event_type="order_delivered",
-            entity_type="order",
-            entity_id=order.id,
-            detail=f"Order {order.id} delivered"
-        )
-        session.add(event)
+        if (order.expected_delivery_day <= current_day):
+            order.status = OrderStatus.DELIVERED
+            event = Event(
+                sim_day=current_day,
+                event_type="order_delivered",
+                entity_type="order",
+                entity_id=order.id,
+                detail=f"Order {order.id} delivered"
+            )
+            session.add(event)
 
     # Log day advance
     event = Event(

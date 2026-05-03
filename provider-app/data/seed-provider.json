@@ -3,12 +3,12 @@
     {
       "name": "PCB Controller",
       "description": "Main control board for 3D printer",
-      "lead_time_days": 2,
-      "initial_stock": 50,
+      "lead_time_days": 3,
+      "initial_stock": 500,
       "pricing_tiers": [
-        {"min_quantity": 1, "price": 25.0},
-        {"min_quantity": 10, "price": 22.0},
-        {"min_quantity": 50, "price": 20.0}
+        {"min_quantity": 1, "price": 40.0},
+        {"min_quantity": 10, "price": 37.0},
+        {"min_quantity": 50, "price": 32.0}
       ]
     },
     {

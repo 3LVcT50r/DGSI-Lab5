@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import requests
 import pandas as pd
@@ -54,6 +55,39 @@ def post_data(endpoint: str, json_data=None):
         return None
     except Exception as e:
         st.error(f"Error: {e}")
+        return None
+
+
+def post_file(endpoint: str, file):
+    """POST a file upload to the API."""
+    try:
+        files = {"file": (file.name, file.getvalue(), file.type or "application/json")}
+        response = requests.post(
+            f"{API_URL}/{endpoint}", files=files
+        )
+        response.raise_for_status()
+        st.success(f"Imported: {endpoint}")
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        try:
+            error_msg = e.response.json().get("detail", str(e))
+        except Exception:
+            error_msg = str(e)
+        st.error(f"Error: {error_msg}")
+        return None
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
+
+
+def export_inventory_data():
+    """Fetch inventory export JSON from the API."""
+    try:
+        response = requests.get(f"{API_URL}/state/export/inventory")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Error exporting inventory: {e}")
         return None
     
 def post_data_provider(endpoint: str, json_data=None):
@@ -250,7 +284,30 @@ with col2:
     else:
         st.info("No inventory data.")
 
-    st.markdown("### 📊 Factory Events")
+    st.markdown("### � Inventory Import / Export")
+    export_col, import_col = st.columns(2)
+    with export_col:
+        if st.button("Export Inventory JSON"):
+            inventory_export = export_inventory_data()
+            if inventory_export is not None:
+                st.download_button(
+                    "Download inventory JSON",
+                    data=json.dumps(inventory_export, indent=2),
+                    file_name="inventory_export.json",
+                    mime="application/json",
+                    help="Download current inventory as a JSON file.",
+                )
+    with import_col:
+        uploaded_file = st.file_uploader(
+            "Import inventory JSON",
+            type=["json"],
+        )
+        if uploaded_file is not None:
+            if st.button("Upload Inventory JSON"):
+                post_file("state/import/inventory", uploaded_file)
+                refresh()
+
+    st.markdown("### �📊 Factory Events")
     events = fetch_data("events")
     if events:
         df_events = pd.DataFrame(events)

@@ -31,13 +31,29 @@ def get_purchase_orders(db: Session = Depends(get_db_session)):
 async def post_purchase_order(
         po_data: PurchaseOrderCreate, db: Session = Depends(get_db_session),
         settings: Settings = Depends(get_settings)):
-    """Create a new purchase order."""
+    """Create a new purchase order.
+    
+    Accepts either product_id (int) or product_name (str).
+    """
     try:
+        # Resolve product_name to product_id if needed
+        product_id = po_data.product_id
+        
+        if product_id is None:
+            # Resolve product name to ID
+            from src.models.product import Product
+            product = db.query(Product).filter(
+                Product.name.ilike(po_data.product_name)
+            ).first()
+            if not product:
+                raise ValueError(f"Product '{po_data.product_name}' not found")
+            product_id = product.id
+        
         return await create_purchase_order(
             db,
             settings,
             supplier_id=po_data.supplier_id,
-            product_id=po_data.product_id,
+            product_id=product_id,
             quantity=po_data.quantity,
             expected_delivery=0,  # Not used anymore
         )

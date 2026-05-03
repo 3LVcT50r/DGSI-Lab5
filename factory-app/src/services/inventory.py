@@ -21,6 +21,63 @@ def get_inventory_levels(
     ]
 
 
+def set_inventory_stock(
+    session: Session,
+    product_id: int,
+    quantity: float,
+    reserved: float = 0.0,
+) -> InventoryRead:
+    """Set the inventory quantity and reserved stock for a product."""
+    inv = session.query(Inventory).filter(
+        Inventory.product_id == product_id
+    ).first()
+    if inv is None:
+        inv = Inventory(
+            product_id=product_id,
+            quantity=quantity,
+            reserved=reserved,
+        )
+        session.add(inv)
+    else:
+        inv.quantity = quantity
+        inv.reserved = reserved
+
+    session.commit()
+    return InventoryRead.model_validate(inv)
+
+
+def initialize_inventory(
+    session: Session,
+    inventory_items: list[dict],
+) -> List[InventoryRead]:
+    """Initialize inventory records from a JSON array."""
+    updated_items: List[InventoryRead] = []
+
+    for item in inventory_items:
+        product_id = int(item["product_id"])
+        quantity = float(item["quantity"])
+        reserved = float(item.get("reserved", 0.0))
+
+        inv = session.query(Inventory).filter(
+            Inventory.product_id == product_id
+        ).first()
+        if inv is None:
+            inv = Inventory(
+                product_id=product_id,
+                quantity=quantity,
+                reserved=reserved,
+            )
+            session.add(inv)
+        else:
+            inv.quantity = quantity
+            inv.reserved = reserved
+
+        updated_items.append(InventoryRead.model_validate(inv))
+
+    session.commit()
+    return updated_items
+
+
 def reserve_materials(
     session: Session,
     product_id: int,

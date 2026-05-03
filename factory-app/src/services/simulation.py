@@ -582,3 +582,93 @@ def import_state(
         ))
 
     session.commit()
+
+
+def export_inventory(session: Session) -> list[dict]:
+    """Export inventory state as JSON-friendly data."""
+    from src.models import Inventory
+
+    return [
+        {
+            "product_id": i.product_id,
+            "quantity": i.quantity,
+            "reserved": i.reserved,
+        }
+        for i in session.query(Inventory).all()
+    ]
+
+
+def export_events(session: Session) -> list[dict]:
+    """Export event history as JSON-friendly data."""
+    return [
+        {
+            "id": e.id,
+            "type": e.type.value,
+            "day": e.sim_date,
+            "details": e.details,
+        }
+        for e in session.query(Event).all()
+    ]
+
+
+def export_inventory_and_events(session: Session) -> dict:
+    """Export inventory and event history together."""
+    return {
+        "inventory": export_inventory(session),
+        "events": export_events(session),
+    }
+
+
+def import_inventory(session: Session, payload: object) -> None:
+    """Import inventory state from JSON payload."""
+    from src.models import Inventory
+
+    if isinstance(payload, dict):
+        inventory_data = payload.get("inventory")
+    else:
+        inventory_data = payload
+
+    if inventory_data is None or not isinstance(inventory_data, list):
+        raise ValueError("Payload must be a list of inventory items or an object containing 'inventory'.")
+
+    for item in inventory_data:
+        product_id = int(item["product_id"])
+        quantity = float(item["quantity"])
+        reserved = float(item.get("reserved", 0.0))
+
+        inv = session.query(Inventory).filter(
+            Inventory.product_id == product_id
+        ).first()
+        if inv is None:
+            session.add(Inventory(
+                product_id=product_id,
+                quantity=quantity,
+                reserved=reserved,
+            ))
+        else:
+            inv.quantity = quantity
+            inv.reserved = reserved
+
+    session.commit()
+
+
+def import_events(session: Session, payload: object) -> None:
+    """Import event history from JSON payload."""
+    if isinstance(payload, dict):
+        events_data = payload.get("events")
+    else:
+        events_data = payload
+
+    if events_data is None or not isinstance(events_data, list):
+        raise ValueError("Payload must be a list of event items or an object containing 'events'.")
+
+    session.query(Event).delete()
+    for event_item in events_data:
+        session.add(Event(
+            id=event_item.get("id"),
+            type=EventType(event_item["type"]),
+            sim_date=int(event_item["day"]),
+            details=event_item.get("details", {}),
+        ))
+
+    session.commit()

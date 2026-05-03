@@ -53,6 +53,7 @@ Abre la primera terminal, asegúrate de activar tu entorno virtual (`source venv
 uvicorn src.main:app --port 8000
 ```
 Tambien se puede usar la cli para ejecutar el servidor:
+si sale el error /usr/bin/env: ‘bash\r’: No such file or directory el archivo debe cambiarse de CLRF a LF (abajo derecha en vscode)
 ```
 ./manufacturer-cli serve --port 8000
 ```
