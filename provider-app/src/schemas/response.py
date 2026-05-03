@@ -50,3 +50,15 @@ class OrderRead(BaseModel):
 class DayRead(BaseModel):
     """Current day response."""
     current_day: int
+
+
+class EventRead(BaseModel):
+    """Event response."""
+    id: int
+    sim_day: int
+    event_type: str
+    entity_type: Optional[str]
+    entity_id: Optional[int]
+    detail: Optional[str]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)

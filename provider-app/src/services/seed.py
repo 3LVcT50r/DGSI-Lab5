@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 from sqlalchemy.orm import Session
-from src.models import Product, PricingTier, Stock, SimState
+from src.models import Product, PricingTier, Stock, SimState, Order, Event
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,8 @@ def seed_database_from_config(session: Session, config_path: Path):
         config_data = json.load(f)
 
     # Clear existing data
+    session.query(Event).delete()
+    session.query(Order).delete()
     session.query(Stock).delete()
     session.query(PricingTier).delete()
     session.query(Product).delete()

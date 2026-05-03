@@ -8,6 +8,7 @@ from sqlalchemy import and_
 from src.models import Product, PricingTier, Stock, Order, OrderStatus, Event, SimState
 from src.schemas.request import OrderCreate
 from src.schemas.response import CatalogItemRead, StockRead, OrderRead
+from src.services.seed import seed_database_from_config
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,13 @@ def get_current_day(session: Session) -> int:
     """Get the current simulated day."""
     sim_state = session.query(SimState).first()
     return sim_state.current_day if sim_state else 0
+
+
+def reset_simulation(session: Session) -> None:
+    """Reset simulation. Wipes DB and reseeds."""
+    from pathlib import Path
+    config_path = Path(__file__).parent.parent / "data" / "seed-provider.json"
+    seed_database_from_config(session, config_path)
 
 
 def set_price(session: Session, product_id: int, min_quantity: int, price: float):

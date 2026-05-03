@@ -48,10 +48,11 @@ def post_data(endpoint: str, json_data=None):
         st.success(f"Success: {endpoint}")
         return response.json()
     except requests.exceptions.HTTPError as e:
-        error_msg = e.response.json().get(
-            "detail", str(e)
-        )
-        st.error(f"Error: {error_msg}")
+        try:
+            error_detail = e.response.json().get("detail", str(e))
+        except requests.exceptions.JSONDecodeError:
+            error_detail = e.response.text or str(e)
+        st.error(f"Error: {error_detail}")
         return None
     except Exception as e:
         st.error(f"Error: {e}")
@@ -70,10 +71,10 @@ def post_file(endpoint: str, file):
         return response.json()
     except requests.exceptions.HTTPError as e:
         try:
-            error_msg = e.response.json().get("detail", str(e))
-        except Exception:
-            error_msg = str(e)
-        st.error(f"Error: {error_msg}")
+            error_detail = e.response.json().get("detail", str(e))
+        except requests.exceptions.JSONDecodeError:
+            error_detail = e.response.text or str(e)
+        st.error(f"Error: {error_detail}")
         return None
     except Exception as e:
         st.error(f"Error: {e}")
@@ -100,10 +101,11 @@ def post_data_provider(endpoint: str, json_data=None):
         st.success(f"Success: {endpoint}")
         return response.json()
     except requests.exceptions.HTTPError as e:
-        error_msg = e.response.json().get(
-            "detail", str(e)
-        )
-        st.error(f"Error: {error_msg}")
+        try:
+            error_detail = e.response.json().get("detail", str(e))
+        except requests.exceptions.JSONDecodeError:
+            error_detail = e.response.text or str(e)
+        st.error(f"Error: {error_detail}")
         return None
     except Exception as e:
         st.error(f"Error: {e}")
@@ -145,6 +147,7 @@ if st.sidebar.button("▶️ Advance Day"):
 
 if st.sidebar.button("🔄 Reset Simulation"):
     post_data("simulate/reset")
+    post_data_provider("day/reset")
     refresh()
 
 st.sidebar.markdown("---")
@@ -307,7 +310,7 @@ with col2:
                 post_file("state/import/inventory", uploaded_file)
                 refresh()
 
-    st.markdown("### �📊 Factory Events")
+    st.markdown("### 📊 Factory Events")
     events = fetch_data("events")
     if events:
         df_events = pd.DataFrame(events)
@@ -318,7 +321,26 @@ with col2:
             use_container_width=True,
         )
     else:
-        st.info("No events logged yet.")
+        st.info("No factory events logged yet.")
+
+    st.markdown("### 📊 Provider Events")
+    provider_events = fetch_data_provider("events")
+    if provider_events:
+        df_provider_events = pd.DataFrame(provider_events)
+        # Normalize column names for display
+        df_provider_events = df_provider_events.rename(columns={
+            "sim_day": "sim_date",
+            "event_type": "type",
+            "detail": "details"
+        })
+        st.dataframe(
+            df_provider_events[[
+                "sim_date", "type", "details",
+            ]],
+            use_container_width=True,
+        )
+    else:
+        st.info("No provider events logged yet.")
 
 # Charts
 st.markdown("---")

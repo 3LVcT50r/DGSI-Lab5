@@ -162,10 +162,14 @@ def initialize_stock(api_url: str, input_path: str) -> None:
         print(json.dumps(response.json(), indent=2))
 
 
-def serve_app(port: int) -> None:
-    """Start the factory FastAPI server."""
-    import uvicorn
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
+def advance_day(api_url: str) -> None:
+    """Advance the simulation by one day via the factory API."""
+    url = api_url.rstrip("/") + "/simulate/advance"
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(url)
+        response.raise_for_status()
+        result = response.json()
+        print(f"Day advanced: {json.dumps(result, indent=2)}")
 
 
 def main() -> None:
@@ -268,6 +272,16 @@ def main() -> None:
     serve_parser = subparsers.add_parser("serve", help="Start the REST API server")
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to serve on")
 
+    day_parser = subparsers.add_parser("day", help="Simulation day commands")
+    day_sub = day_parser.add_subparsers(dest="day_command", required=True)
+    day_sub.add_parser("advance", help="Advance the simulation by one day")
+    day_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8000/api/v1",
+        help="Factory API base URL"
+    )
+
     args = parser.parse_args()
     settings = Settings()
     providers = load_providers(settings)
@@ -353,6 +367,12 @@ def main() -> None:
                 initialize_stock(args.api_url, args.input)
             except Exception as exc:
                 print(f"Failed to initialize inventory stock: {exc}")
+    elif args.command == "day":
+        if args.day_command == "advance":
+            try:
+                advance_day(args.api_url)
+            except httpx.HTTPError as exc:
+                print(f"Failed to advance day: {exc}")
     elif args.command == "serve":
         serve_app(args.port)
 

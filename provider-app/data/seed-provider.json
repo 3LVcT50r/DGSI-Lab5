@@ -1,36 +1,91 @@
 {
   "products": [
     {
-      "name": "PCB Controller",
-      "description": "Main control board for 3D printer",
+      "name": "kit_piezas",
+      "description": "Set of printed parts and hardware kit",
       "lead_time_days": 3,
-      "initial_stock": 500,
+      "initial_stock": 200,
       "pricing_tiers": [
-        {"min_quantity": 1, "price": 40.0},
+        {"min_quantity": 1, "price": 90.0},
+        {"min_quantity": 10, "price": 85.0},
+        {"min_quantity": 50, "price": 80.0}
+      ]
+    },
+    {
+      "name": "pcb",
+      "description": "Main printed circuit board",
+      "lead_time_days": 3,
+      "initial_stock": 150,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 44.0},
         {"min_quantity": 10, "price": 37.0},
         {"min_quantity": 50, "price": 32.0}
       ]
     },
     {
-      "name": "Extruder Assembly",
-      "description": "Complete extruder unit",
+      "name": "pcb_ref",
+      "description": "Control board reference module",
       "lead_time_days": 3,
-      "initial_stock": 30,
+      "initial_stock": 120,
       "pricing_tiers": [
-        {"min_quantity": 1, "price": 45.0},
-        {"min_quantity": 5, "price": 42.0},
-        {"min_quantity": 20, "price": 40.0}
+        {"min_quantity": 1, "price": 10.0},
+        {"min_quantity": 10, "price": 9.0},
+        {"min_quantity": 50, "price": 8.0}
       ]
     },
     {
-      "name": "Power Supply 24V",
-      "description": "24V power supply unit",
-      "lead_time_days": 1,
-      "initial_stock": 100,
+      "name": "extrusor",
+      "description": "Extruder assembly for filament feed",
+      "lead_time_days": 4,
+      "initial_stock": 80,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 35.0},
+        {"min_quantity": 5, "price": 32.0},
+        {"min_quantity": 20, "price": 30.0}
+      ]
+    },
+    {
+      "name": "sensor_autonivel",
+      "description": "Auto-leveling sensor",
+      "lead_time_days": 2,
+      "initial_stock": 90,
       "pricing_tiers": [
         {"min_quantity": 1, "price": 15.0},
-        {"min_quantity": 25, "price": 13.0},
-        {"min_quantity": 100, "price": 12.0}
+        {"min_quantity": 10, "price": 14.0},
+        {"min_quantity": 50, "price": 12.0}
+      ]
+    },
+    {
+      "name": "cables_conexion",
+      "description": "Connection cable set",
+      "lead_time_days": 1,
+      "initial_stock": 300,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 2.0},
+        {"min_quantity": 50, "price": 1.8},
+        {"min_quantity": 200, "price": 1.5}
+      ]
+    },
+    {
+      "name": "transformador_24v",
+      "description": "24V power transformer",
+      "lead_time_days": 3,
+      "initial_stock": 100,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 18.0},
+        {"min_quantity": 5, "price": 17.0},
+        {"min_quantity": 20, "price": 15.0}
+      ]
+    },
+    {
+      "name": "enchufe_schuko",
+      "description": "Schuko mains plug",
+      "lead_time_days": 2,
+      "initial_stock": 200,
+      "pricing_tiers": [
+        {"min_quantity": 1, "price": 3.5},
+        {"min_quantity": 20, "price": 3.2},
+        {"min_quantity": 100, "price": 3.0}
       ]
     }
   ]

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.database import get_db_session
 from src.schemas.response import DayRead
-from src.services.provider import advance_day, get_current_day
+from src.services.provider import advance_day, get_current_day, reset_simulation
 
 router = APIRouter()
 
@@ -20,3 +20,10 @@ def get_current_day_endpoint(db: Session = Depends(get_db_session)):
     """Get the current simulated day."""
     current_day = get_current_day(db)
     return DayRead(current_day=current_day)
+
+
+@router.post("/day/reset")
+def post_reset_simulation(db: Session = Depends(get_db_session)):
+    """Reset simulation to initial configuration."""
+    reset_simulation(db)
+    return {"status": "reset"}
