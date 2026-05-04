@@ -1,0 +1,597 @@
+openapi: 3.0.3
+info:
+  title: Factory API
+  version: 1.0.0
+  description: |
+    Swagger documentation for the 3D Printer Factory Simulation REST API.
+    The factory service exposes manufacturing, inventory, purchasing, export/import and simulation control endpoints.
+servers:
+  - url: http://localhost:8002/api/v1
+paths:
+  /orders:
+    get:
+      summary: List manufacturing orders
+      responses:
+        '200':
+          description: A list of manufacturing orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManufacturingOrderRead'
+  /orders/{order_id}:
+    get:
+      summary: Get a manufacturing order by ID
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Manufacturing order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturingOrderRead'
+        '404':
+          description: Order not found
+    delete:
+      summary: Cancel a pending manufacturing order
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Cannot cancel a non-pending order
+        '404':
+          description: Order not found
+  /orders/{order_id}/release:
+    post:
+      summary: Release a pending manufacturing order to production
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManufacturingOrderRead'
+        '400':
+          description: Invalid order state
+  /inventory:
+    get:
+      summary: List inventory items
+      responses:
+        '200':
+          description: Inventory levels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryRead'
+  /inventory/{product_id}:
+    get:
+      summary: Get inventory for a product
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: Inventory record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryRead'
+        '404':
+          description: Inventory item not found
+    put:
+      summary: Update inventory stock levels
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryStockUpdate'
+      responses:
+        '200':
+          description: Updated inventory record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryRead'
+        '400':
+          description: Invalid inventory update
+  /inventory/initialize:
+    post:
+      summary: Initialize inventory state from a list of items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryItem'
+      responses:
+        '200':
+          description: Inventory initialized
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InventoryRead'
+        '400':
+          description: Invalid payload
+  /purchase-orders:
+    get:
+      summary: List purchase orders
+      responses:
+        '200':
+          description: Purchase orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PurchaseOrderRead'
+    post:
+      summary: Create a purchase order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderCreate'
+      responses:
+        '200':
+          description: Created purchase order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrderRead'
+        '400':
+          description: Invalid purchase order data
+  /purchase-orders/{po_id}/cancel:
+    post:
+      summary: Cancel an open purchase order
+      parameters:
+        - $ref: '#/components/parameters/PurchaseOrderId'
+      responses:
+        '200':
+          description: Purchase order cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Invalid cancel request
+        '404':
+          description: Purchase order not found
+  /catalog:
+    get:
+      summary: Get provider catalog via factory
+      responses:
+        '200':
+          description: Provider catalog data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogItem'
+  /suppliers:
+    get:
+      summary: List configured suppliers
+      responses:
+        '200':
+          description: Supplier configuration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierRead'
+  /suppliers/{supplier_id}/catalog:
+    get:
+      summary: Legacy supplier catalog endpoint
+      parameters:
+        - $ref: '#/components/parameters/SupplierId'
+      responses:
+        '200':
+          description: Supplier catalog (legacy)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierRead'
+  /bom:
+    get:
+      summary: List BOM definitions
+      responses:
+        '200':
+          description: BOM definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BOMRead'
+  /bom/product/{product_id}:
+    get:
+      summary: Get BOM for a finished product
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: BOM items for the product
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BOMRead'
+  /events:
+    get:
+      summary: List recent event history
+      responses:
+        '200':
+          description: Event history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EventRead'
+  /state/export:
+    get:
+      summary: Export current simulation state
+      responses:
+        '200':
+          description: Simulation state JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /state/export/inventory:
+    get:
+      summary: Export inventory state
+      responses:
+        '200':
+          description: Inventory export JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /state/export/events:
+    get:
+      summary: Export event history
+      responses:
+        '200':
+          description: Event history export JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /state/import/inventory:
+    post:
+      summary: Import inventory state from JSON file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Inventory imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Invalid import payload
+  /state/import/events:
+    post:
+      summary: Import event history from JSON file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Events imported
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Invalid import payload
+  /simulate/status:
+    get:
+      summary: Get current simulation status
+      responses:
+        '200':
+          description: Simulation status snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+  /simulate/advance:
+    post:
+      summary: Advance the simulation day
+      responses:
+        '200':
+          description: Simulation advanced
+          content:
+            application/json:
+              schema:
+                type: object
+  /simulate/reset:
+    post:
+      summary: Reset simulation state
+      responses:
+        '200':
+          description: Simulation reset
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  parameters:
+    OrderId:
+      name: order_id
+      in: path
+      required: true
+      schema:
+        type: integer
+    PurchaseOrderId:
+      name: po_id
+      in: path
+      required: true
+      schema:
+        type: integer
+    ProductId:
+      name: product_id
+      in: path
+      required: true
+      schema:
+        type: integer
+    SupplierId:
+      name: supplier_id
+      in: path
+      required: true
+      schema:
+        type: integer
+  schemas:
+    ProductType:
+      type: string
+      enum:
+        - raw
+        - finished
+    ProductBase:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/ProductType'
+      required:
+        - name
+        - type
+    PurchaseOrderCreate:
+      type: object
+      properties:
+        supplier_id:
+          type: integer
+        product_id:
+          type: integer
+          nullable: true
+        product_name:
+          type: string
+          nullable: true
+        quantity:
+          type: integer
+      required:
+        - supplier_id
+        - quantity
+      description: One of product_id or product_name must be provided.
+    InventoryItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        quantity:
+          type: number
+        reserved:
+          type: number
+          default: 0.0
+      required:
+        - product_id
+        - quantity
+    InventoryStockUpdate:
+      type: object
+      properties:
+        quantity:
+          type: number
+        reserved:
+          type: number
+          default: 0.0
+      required:
+        - quantity
+    ProductRead:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/ProductType'
+      required:
+        - id
+        - name
+        - type
+    BOMRead:
+      type: object
+      properties:
+        id:
+          type: integer
+        finished_product_id:
+          type: integer
+        material_id:
+          type: integer
+        quantity:
+          type: number
+      required:
+        - id
+        - finished_product_id
+        - material_id
+        - quantity
+    SupplierRead:
+      type: object
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+      required:
+        - name
+        - url
+    InventoryRead:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        quantity:
+          type: number
+        reserved:
+          type: number
+      required:
+        - product_id
+        - quantity
+    ManufacturingOrderRead:
+      type: object
+      properties:
+        id:
+          type: integer
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+        created_date:
+          type: integer
+        status:
+          type: string
+        start_date:
+          type: integer
+          nullable: true
+        completed_date:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - product_id
+        - quantity
+        - created_date
+        - status
+    PurchaseOrderRead:
+      type: object
+      properties:
+        id:
+          type: integer
+        supplier_id:
+          type: integer
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+        issue_date:
+          type: integer
+        expected_delivery:
+          type: integer
+        status:
+          type: string
+        provider_order_id:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - supplier_id
+        - product_id
+        - quantity
+        - issue_date
+        - expected_delivery
+        - status
+    EventRead:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        sim_date:
+          type: integer
+        details:
+          type: object
+      required:
+        - id
+        - type
+        - sim_date
+        - details
+    SimulationStatus:
+      type: object
+      properties:
+        current_day:
+          type: integer
+        pending_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManufacturingOrderRead'
+        inventory_levels:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryRead'
+        open_purchase_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseOrderRead'
+    CatalogItem:
+      type: object
+      properties:
+        product:
+          type: object
+        pricing_tiers:
+          type: array
+          items:
+            type: object

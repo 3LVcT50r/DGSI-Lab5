@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import httpx
+import uvicorn
 from src.config import Settings
 
 
@@ -75,6 +76,11 @@ def create_purchase_order(provider: Dict[str, Any], product_identifier: Union[st
         response = client.post(url, json=payload)
         response.raise_for_status()
         return response.json()
+
+
+def serve_app(port: int = 8000) -> None:
+    """Serve the factory FastAPI app using Uvicorn."""
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
 
 
 def list_provider_orders(provider: Dict[str, Any]) -> List[Dict[str, Any]]:
