@@ -45,33 +45,62 @@ pip install -r requirements.txt
 
 ## 🕹️ Cómo Ejecutar el Simulador
 
-El software está dividido en dos grandes "cerebros". Tienes que tener tanto la parte lógica encendida (FastAPI) como la parte gráfica encendida (Streamlit). Para ello, **necesitas abrir dos terminales separadas.**
+El sistema ahora consta de tres aplicaciones independientes y un motor de turnos que las orquesta en cada día simulado:
 
-### 1️⃣ Levantar el Servidor Backend (API)
-Abre la primera terminal, asegúrate de activar tu entorno virtual (`source venv/bin/activate`) e inicia el motor con:
+- `provider-app`: proveedor de piezas, puerto `8001`
+- `factory-app`: fabricante / productor, puerto `8002`
+- `retailer-app`: minorista que vende impresoras, puerto `8003`
+
+Cada app tiene su propio servidor FastAPI y su propia base de datos SQLite. Además existe una UI Streamlit para el fabricante y un motor de turnos que avanza los tres sistemas juntos.
+
+### 1️⃣ Levantar los servidores backend
+Abre tres terminales separadas y activa el entorno virtual en cada una.
+
+Terminal 1: proveedor
 ```bash
-uvicorn src.main:app --port 8000
-```
-Tambien se puede usar la cli para ejecutar el servidor:
-!!!!!!!! Si sale el error /usr/bin/env: ‘bash\r’: No such file or directory el archivo debe cambiarse de CLRF a LF (abajo derecha en vscode)
-
-Si no se pudiera se pueden ejecutar todos los comandos entrando al directorio factory-app o provider -app y ejecutando allí "python -m src.cli serve port 8000"
-
-```
-./manufacturer-cli serve --port 8000
-```
-Y en otra terminal: 
-```
 ./provider-cli serve --port 8001
 ```
-> El backend quedará ejecutándose en segundo plano exponiendo todos sus servicios en el puerto 8000. Además, puedes interactuar directamente con toda su documentación Swagger en `http://localhost:8000/docs`. No la cierres.
+Terminal 2: fabricante
+```bash
+./manufacturer-cli serve --port 8002
+```
+Terminal 3: minorista
+```bash
+./retailer-cli serve --port 8003
+```
+
+En Windows usa los wrappers `.cmd`:
+```powershell
+provider-cli.cmd serve --port 8001
+manufacturer-cli.cmd serve --port 8002
+retailer-cli.cmd serve --port 8003
+```
+
+Cada servicio expone su propia documentación Swagger:
+- `http://localhost:8001/docs`
+- `http://localhost:8002/docs`
+- `http://localhost:8003/docs`
 
 ### 2️⃣ Levantar el Panel Visual (Dashboard Frontend)
-Abre una **segunda terminal**, vuelve a activar el entorno y manda arrancar el renderizado web visual:
+Abre otra terminal, activa el entorno virtual y ejecuta:
 ```bash
 streamlit run factory-app/src/ui/app.py
 ```
-> Tu navegador abrirá automáticamente el panel visual en `http://localhost:8501`.
+
+> El dashboard abrirá en `http://localhost:8501`.
+
+### 3️⃣ Ejecutar el motor de turnos
+Con los tres servicios ya activos, lanza el motor de turnos para inyectar demanda, ejecutar decisiones y avanzar el día en los tres apps:
+
+```bash
+python turn_engine.py config/sim.json scenarios/smoke-test.json 3
+```
+
+Esto hará que:
+- se creen ódenes de cliente en el minorista
+- los roles tomen decisiones (o se usen stubs)
+- los tres servicios avancen al siguiente día
+- el output de los agentes se guarde en `logs/day-***.log`
 
 ---
 

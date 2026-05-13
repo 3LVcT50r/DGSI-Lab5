@@ -5,6 +5,7 @@ from src.schemas.request import (
     BOMItem,
     SupplierBase,
     ManufacturingOrderBase,
+    SalesOrderCreate,
     PurchaseOrderCreate,
 )
 from src.schemas.response import (
@@ -13,6 +14,7 @@ from src.schemas.response import (
     SupplierRead,
     InventoryRead,
     ManufacturingOrderRead,
+    SalesOrderRead,
     PurchaseOrderRead,
     EventRead,
     SimulationStatus,
@@ -29,7 +31,9 @@ __all__ = [
     "SupplierRead",
     "InventoryRead",
     "ManufacturingOrderBase",
+    "SalesOrderCreate",
     "ManufacturingOrderRead",
+    "SalesOrderRead",
     "PurchaseOrderCreate",
     "PurchaseOrderRead",
     "EventRead",

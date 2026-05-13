@@ -35,6 +35,12 @@ class ManufacturingOrderBase(BaseModel):
     quantity: int
 
 
+class SalesOrderCreate(BaseModel):
+    retailer: str
+    product_id: int
+    quantity: int
+
+
 class PurchaseOrderCreate(BaseModel):
     supplier_id: int
     product_id: Optional[int] = None

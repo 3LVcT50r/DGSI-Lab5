@@ -1,0 +1,27 @@
+{
+  "retailers": [
+    {
+      "name": "PrinterWorld",
+      "port": 8003,
+      "url": "http://localhost:8003",
+      "path": "retailer-app",
+      "skill": "skills/retailer-manager.md"
+    }
+  ],
+  "manufacturer": {
+    "name": "Factory",
+    "port": 8002,
+    "url": "http://localhost:8002",
+    "path": "factory-app",
+    "skill": "skills/manufacturer-manager.md"
+  },
+  "providers": [
+    {
+      "name": "ChipSupply Co",
+      "port": 8001,
+      "url": "http://localhost:8001",
+      "path": "provider-app",
+      "skill": null
+    }
+  ]
+}

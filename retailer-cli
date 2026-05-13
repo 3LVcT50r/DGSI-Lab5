@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Wrapper for running the retailer-app CLI from the workspace root on Linux/macOS.
+# It changes into retailer-app and sets PYTHONPATH so python can locate src.
+
+cd "$(dirname "$0")/retailer-app" || exit 1
+PYTHONPATH="." python -m src.cli "$@"
