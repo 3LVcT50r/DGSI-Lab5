@@ -230,6 +230,140 @@ def set_price(session: Session, model: str, price: float) -> ProductRead:
     return ProductRead.from_orm(product)
 
 
+def export_state(session: Session) -> dict:
+    """Export the retailer simulation state to JSON serializable data."""
+    products = [
+        {
+            "id": product.id,
+            "name": product.name,
+            "wholesale_price": product.wholesale_price,
+            "retail_price": product.retail_price,
+        }
+        for product in session.query(Product).all()
+    ]
+    stock = [
+        {
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+        }
+        for item in session.query(Stock).all()
+    ]
+    customer_orders = [
+        {
+            "id": order.id,
+            "customer": order.customer,
+            "product_id": order.product_id,
+            "quantity": order.quantity,
+            "status": order.status.value,
+            "created_day": order.created_day,
+            "fulfilled_day": order.fulfilled_day,
+        }
+        for order in session.query(CustomerOrder).all()
+    ]
+    purchase_orders = [
+        {
+            "id": po.id,
+            "product_id": po.product_id,
+            "quantity": po.quantity,
+            "status": po.status.value,
+            "issue_day": po.issue_day,
+            "expected_delivery_day": po.expected_delivery_day,
+            "manufacturer_order_id": po.manufacturer_order_id,
+        }
+        for po in session.query(PurchaseOrder).all()
+    ]
+    events = [
+        {
+            "id": event.id,
+            "sim_day": event.sim_day,
+            "event_type": event.event_type,
+            "entity_type": event.entity_type,
+            "entity_id": event.entity_id,
+            "detail": event.detail,
+        }
+        for event in session.query(Event).all()
+    ]
+    sim_state = session.query(SimState).first()
+    sim_state_data = {
+        "id": sim_state.id if sim_state else None,
+        "current_day": sim_state.current_day if sim_state else 0,
+    }
+
+    return {
+        "products": products,
+        "stock": stock,
+        "customer_orders": customer_orders,
+        "purchase_orders": purchase_orders,
+        "events": events,
+        "sim_state": sim_state_data,
+    }
+
+
+def import_state(session: Session, state_data: dict) -> None:
+    """Import retailer simulation state from JSON data."""
+    session.query(Event).delete()
+    session.query(CustomerOrder).delete()
+    session.query(PurchaseOrder).delete()
+    session.query(Stock).delete()
+    session.query(Product).delete()
+    session.query(SimState).delete()
+    session.flush()
+
+    for product_data in state_data.get("products", []):
+        session.add(Product(
+            id=product_data["id"],
+            name=product_data["name"],
+            wholesale_price=product_data["wholesale_price"],
+            retail_price=product_data["retail_price"],
+        ))
+
+    session.flush()
+
+    for stock_data in state_data.get("stock", []):
+        session.add(Stock(
+            product_id=stock_data["product_id"],
+            quantity=stock_data["quantity"],
+        ))
+
+    for order_data in state_data.get("customer_orders", []):
+        session.add(CustomerOrder(
+            id=order_data["id"],
+            customer=order_data["customer"],
+            product_id=order_data["product_id"],
+            quantity=order_data["quantity"],
+            status=OrderStatus(order_data["status"]),
+            created_day=order_data["created_day"],
+            fulfilled_day=order_data.get("fulfilled_day"),
+        ))
+
+    for po_data in state_data.get("purchase_orders", []):
+        session.add(PurchaseOrder(
+            id=po_data["id"],
+            product_id=po_data["product_id"],
+            quantity=po_data["quantity"],
+            status=PurchaseOrderStatus(po_data["status"]),
+            issue_day=po_data["issue_day"],
+            expected_delivery_day=po_data["expected_delivery_day"],
+            manufacturer_order_id=po_data.get("manufacturer_order_id"),
+        ))
+
+    sim_state_data = state_data.get("sim_state") or {"current_day": 0}
+    sim_id = sim_state_data.get("id")
+    session.add(SimState(id=sim_id, current_day=sim_state_data.get("current_day", 0)))
+
+    for event_data in state_data.get("events", []):
+        session.add(Event(
+            id=event_data["id"],
+            sim_day=event_data["sim_day"],
+            event_type=event_data["event_type"],
+            entity_type=event_data.get("entity_type"),
+            entity_id=event_data.get("entity_id"),
+            detail=event_data["detail"],
+        ))
+
+    session.commit()
+
+
 def advance_day(session: Session) -> int:
     """Advance the simulation by one day."""
     sim_state = session.query(SimState).first()

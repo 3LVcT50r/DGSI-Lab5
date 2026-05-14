@@ -10,8 +10,14 @@ import uvicorn
 from src.config import Settings
 
 
-def serve_app(port: int = 8003) -> None:
+def serve_app(port: int = 8003, config_path: str | None = None) -> None:
     """Serve the retailer FastAPI app using Uvicorn."""
+    if config_path:
+        import os
+
+        os.environ["DEFAULT_SEED_PATH"] = config_path
+        print(f"Using retailer config: {config_path}")
+
     uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
 
 
@@ -148,9 +154,43 @@ def create_purchase_order(api_url: str, model: str, quantity: int) -> None:
 
 def set_price(api_url: str, model: str, price: float) -> None:
     """Set retail price for a model."""
-    # This would need a new endpoint, for now just print
-    print(f"Setting price for {model} to ${price:.2f}")
-    print("Note: Price setting not yet implemented in API")
+    url = api_url.rstrip("/") + "/api/v1/prices"
+    payload = {"model": model, "price": price}
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(url, json=payload)
+        response.raise_for_status()
+        product = response.json()
+
+    print(f"Retail price updated for {model} to ${product['retail_price']:.2f}")
+
+
+def export_state(api_url: str, output_path: str | None = None) -> None:
+    """Export retailer state to JSON."""
+    url = api_url.rstrip("/") + "/api/v1/state/export"
+    with httpx.Client(timeout=30.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        state = response.json()
+
+    if output_path:
+        path = Path(output_path)
+        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        print(f"State exported to {path}")
+    else:
+        print(json.dumps(state, indent=2))
+
+
+def import_state(api_url: str, input_path: str) -> None:
+    """Import retailer state from JSON."""
+    url = api_url.rstrip("/") + "/api/v1/state/import"
+    path = Path(input_path)
+    state_data = json.loads(path.read_text(encoding="utf-8"))
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(url, json=state_data)
+        response.raise_for_status()
+        result = response.json()
+
+    print(f"State imported: {result}")
 
 
 def advance_day(api_url: str) -> None:
@@ -269,6 +309,24 @@ def main() -> None:
         help="Retailer API base URL"
     )
 
+    fulfill_parser = subparsers.add_parser("fulfill", help="Fulfill a customer order")
+    fulfill_parser.add_argument("order_id", type=int, help="Customer order ID")
+    fulfill_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8003/api/v1",
+        help="Retailer API base URL"
+    )
+
+    backorder_parser = subparsers.add_parser("backorder", help="Backorder a customer order")
+    backorder_parser.add_argument("order_id", type=int, help="Customer order ID")
+    backorder_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8003/api/v1",
+        help="Retailer API base URL"
+    )
+
     price_parser = subparsers.add_parser("price", help="Price commands")
     price_sub = price_parser.add_subparsers(dest="subcommand", required=True)
     price_set_parser = price_sub.add_parser("set", help="Set retail price")
@@ -321,6 +379,11 @@ def main() -> None:
 
     serve_parser = subparsers.add_parser("serve", help="Start the REST API server")
     serve_parser.add_argument("--port", type=int, default=8003, help="Port to serve on")
+    serve_parser.add_argument(
+        "--config",
+        type=str,
+        help="Path to retailer config JSON file"
+    )
 
     args = parser.parse_args()
 
@@ -366,6 +429,16 @@ def main() -> None:
                 create_purchase_order(args.api_url, args.model, args.qty)
             except httpx.HTTPError as exc:
                 print(f"Failed to create purchase order: {exc}")
+    elif args.command == "fulfill":
+        try:
+            fulfill_order(args.api_url, args.order_id)
+        except httpx.HTTPError as exc:
+            print(f"Failed to fulfill order: {exc}")
+    elif args.command == "backorder":
+        try:
+            backorder_order(args.api_url, args.order_id)
+        except httpx.HTTPError as exc:
+            print(f"Failed to backorder order: {exc}")
     elif args.command == "price":
         if args.subcommand == "set":
             try:
@@ -394,7 +467,7 @@ def main() -> None:
         except Exception as exc:
             print(f"Failed to import state: {exc}")
     elif args.command == "serve":
-        serve_app(args.port)
+        serve_app(args.port, getattr(args, "config", None))
 
 
 if __name__ == "__main__":

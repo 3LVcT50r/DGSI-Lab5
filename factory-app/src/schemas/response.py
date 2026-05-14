@@ -12,6 +12,7 @@ from src.schemas.request import (
 class ProductRead(ProductBase):
     """Product response."""
     id: int
+    wholesale_price: float
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -57,7 +58,10 @@ class SalesOrderRead(BaseModel):
     quantity: int
     status: str
     received_date: int
+    released_date: Optional[int] = None
+    start_date: Optional[int] = None
     completed_date: Optional[int] = None
+    delivered_date: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 

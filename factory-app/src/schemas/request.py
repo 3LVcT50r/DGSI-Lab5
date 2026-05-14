@@ -37,8 +37,14 @@ class ManufacturingOrderBase(BaseModel):
 
 class SalesOrderCreate(BaseModel):
     retailer: str
-    product_id: int
+    model: str | None = None
+    product_id: Optional[int] = None
     quantity: int
+
+
+class PriceSet(BaseModel):
+    model: str
+    price: float
 
 
 class PurchaseOrderCreate(BaseModel):

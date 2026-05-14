@@ -16,7 +16,9 @@ class SalesOrderStatus(str, enum.Enum):
     """Lifecycle states for a sales order (from retailers)."""
     PENDING = "pending"
     RELEASED = "released"
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    DELIVERED = "delivered"
 
 
 class ManufacturingOrder(Base):
@@ -34,8 +36,10 @@ class ManufacturingOrder(Base):
     )
     start_date = Column(Integer, nullable=True)             # simulation day
     completed_date = Column(Integer, nullable=True)         # simulation day
+    sales_order_id = Column(Integer, ForeignKey("sales_orders.id"), nullable=True)
 
     product = relationship("Product")
+    sales_order = relationship("SalesOrder", back_populates="manufacturing_orders")
 
 
 class SalesOrder(Base):
@@ -52,9 +56,13 @@ class SalesOrder(Base):
         nullable=False,
     )
     received_date = Column(Integer, nullable=False)         # simulation day
+    released_date = Column(Integer, nullable=True)
+    start_date = Column(Integer, nullable=True)            # simulation day
     completed_date = Column(Integer, nullable=True)         # simulation day
+    delivered_date = Column(Integer, nullable=True)         # simulation day
 
     product = relationship("Product")
+    manufacturing_orders = relationship("ManufacturingOrder", back_populates="sales_order")
 
 
 class SimulationState(Base):

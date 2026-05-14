@@ -63,7 +63,9 @@ def seed_database_from_config(
         "models", {}
     ).items():
         fin_prod = Product(
-            name=model_name, type=ProductType.FINISHED
+            name=model_name,
+            type=ProductType.FINISHED,
+            wholesale_price=model_info.get("wholesale_price", 150.0),
         )
         session.add(fin_prod)
         products_cache[model_name] = fin_prod
