@@ -309,5 +309,6 @@ def get_current_day(session: Session) -> int:
 def reset_simulation(session: Session) -> None:
     """Reset simulation. Wipes DB and reseeds."""
     from pathlib import Path
-    config_path = Path(__file__).parent.parent / "data" / "seed-retailer.json"
+    from src.services.seed import seed_database_from_config
+    config_path = Path(__file__).parent.parent.parent / "data" / "seed-retailer.json"
     seed_database_from_config(session, config_path)

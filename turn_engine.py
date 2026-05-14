@@ -87,7 +87,7 @@ Do NOT advance the day — the turn engine does that.
     
     try:
         result = subprocess.run(
-            ["claude", "--print", "--prompt", prompt],
+            ["claude", "-p", prompt],
             capture_output=True,
             text=True,
             cwd=app_working_dir,
@@ -107,11 +107,22 @@ Do NOT advance the day — the turn engine does that.
         logger.error(f"[{role}] Agent failed: {exc}")
 
 
-def advance_all(urls: List[str]) -> None:
+def advance_all(config: Dict[str, Any]) -> None:
     """Advance all apps to the next day."""
-    for url in urls:
+    urls_with_endpoints = []
+    for r in config.get("retailers", []):
+        urls_with_endpoints.append((r["url"], "/api/v1/day/advance"))
+    
+    manuf = config.get("manufacturer")
+    if manuf:
+        urls_with_endpoints.append((manuf["url"], "/api/v1/simulate/advance"))
+        
+    for p in config.get("providers", []):
+        urls_with_endpoints.append((p["url"], "/api/v1/day/advance"))
+
+    for url, endpoint in urls_with_endpoints:
         try:
-            httpx.post(f"{url}/api/v1/day/advance")
+            httpx.post(f"{url}{endpoint}")
         except Exception as exc:
             logger.warning(f"Failed to advance {url}: {exc}")
 
@@ -120,6 +131,9 @@ def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
     """Execute one full simulated day."""
     signal = todays_signal(day, scenario)
     logger.info(f"\n{'='*60}\n DAY {day} signal={signal}\n{'='*60}")
+    
+    # Ensure logs directory exists
+    Path("logs").mkdir(exist_ok=True)
     
     # 1. Generate customer demand at retailers
     for retailer in config["retailers"]:
@@ -138,15 +152,16 @@ def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
         )
     
     # 3. Run manufacturer agent
-    logger.info(f"Running manufacturer agent")
+    logger.info("Running manufacturer agent")
+    manuf = config["manufacturer"]
     run_agent_or_stub(
         "manufacturer",
-        config["manufacturer"].get("skill"),
+        manuf.get("skill"),
         context_json,
-        config["manufacturer"]["path"]
+        manuf["path"]
     )
     
-    # 4. Run provider agents (usually stubbed)
+    # 4. Run provider agents
     for provider in config["providers"]:
         logger.info(f"Running provider agent: {provider['name']}")
         run_agent_or_stub(
@@ -158,12 +173,7 @@ def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
     
     # 5. Advance all apps
     logger.info("Advancing all apps to next day")
-    all_urls = (
-        [r["url"] for r in config["retailers"]]
-        + [config["manufacturer"]["url"]]
-        + [p["url"] for p in config["providers"]]
-    )
-    advance_all(all_urls)
+    advance_all(config)
 
 
 def main() -> None:
