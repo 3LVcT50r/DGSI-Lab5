@@ -2,6 +2,7 @@
 
 import json
 import logging
+import random
 from typing import List, Optional
 from pathlib import Path
 
@@ -328,6 +329,54 @@ def auto_fulfill_backorders(session: Session) -> None:
         session.add(event)
 
 
+def generate_customer_demand(session: Session, day: int, settings: Settings) -> None:
+    """Generate daily customer orders (Gaussian distribution)."""
+    seed_val = settings.default_config.get("retailer", {}).get("demand_seed")
+    if seed_val is not None:
+        random.seed(f"{seed_val}_{day}")
+
+    config = settings.default_config
+    products = session.query(Product).all()
+
+    for product in products:
+        products_cfg = config.get("products", {})
+        prod_cfg = products_cfg.get(product.name, {})
+
+        mean = prod_cfg.get("demand_mean", config.get("default_mean", 2))
+        variance = prod_cfg.get("demand_variance", config.get("default_variance", 1.0))
+        std_dev = variance ** 0.5
+
+        demand_qty = int(round(random.gauss(mean, std_dev)))
+        if demand_qty < 0:
+            demand_qty = 0
+
+        if demand_qty > 0:
+            # Generate multiple customer orders or one large order
+            for _ in range(demand_qty):
+                customer_name = f"Customer_{product.id}_{day}_{_}"
+                total_price = round(product.retail_price, 2)
+                
+                order = CustomerOrder(
+                    customer_name=customer_name,
+                    product_id=product.id,
+                    quantity=1,
+                    status=CustomerOrderStatus.CREATED,
+                    created_day=day,
+                    total_price=total_price,
+                )
+                session.add(order)
+                session.flush()
+                
+                event = Event(
+                    sim_day=day,
+                    event_type="customer_order_created",
+                    entity_type="customer_order",
+                    entity_id=order.id,
+                    detail=f"Generated customer order for 1 unit of {product.name}",
+                )
+                session.add(event)
+
+
 def advance_day(session: Session, settings: Settings) -> int:
     sim_state = session.query(SimState).first()
     if not sim_state:
@@ -335,6 +384,9 @@ def advance_day(session: Session, settings: Settings) -> int:
         session.add(sim_state)
     current_day = sim_state.current_day + 1
     sim_state.current_day = current_day
+
+    # Generate new customer demand
+    generate_customer_demand(session, current_day, settings)
 
     poll_manufacturer_shipments(session, settings)
     auto_fulfill_backorders(session)

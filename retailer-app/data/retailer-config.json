@@ -6,6 +6,23 @@
       "name": "Factory",
       "url": "http://localhost:8002"
     },
-    "markup_pct": 30
-  }
+    "markup_pct": 30,
+    "demand_seed": null
+  },
+  "products": {
+    "P3D-Classic": {
+      "demand_mean": 3,
+      "demand_variance": 1.5
+    },
+    "P3D-Pro": {
+      "demand_mean": 2,
+      "demand_variance": 1.0
+    },
+    "P3D-Mini": {
+      "demand_mean": 4,
+      "demand_variance": 2.0
+    }
+  },
+  "default_mean": 3,
+  "default_variance": 1.5
 }

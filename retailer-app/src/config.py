@@ -33,5 +33,13 @@ class Settings(BaseSettings):
                 self.manufacturer_url = retailer.get("manufacturer", {}).get("url", self.manufacturer_url)
                 self.markup_pct = retailer.get("markup_pct", self.markup_pct)
                 self.port = retailer.get("port", self.port)
+                self._default_config = config_data
             except ValueError:
-                pass
+                self._default_config = {}
+        else:
+            self._default_config = {}
+
+    @property
+    def default_config(self) -> dict:
+        """Get the full configuration dictionary."""
+        return self._default_config
