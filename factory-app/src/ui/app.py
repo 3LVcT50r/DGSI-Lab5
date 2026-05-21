@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
-API_URL = "http://localhost:8000/api/v1"
+API_URL = "http://localhost:8002/api/v1"
 PROVIDER_API_URL = "http://localhost:8001/api/v1"
 
 st.set_page_config(
@@ -126,7 +126,7 @@ products = fetch_data("products")
 if status is None or products is None:
     st.warning(
         "Cannot connect to backend. "
-        "Is FastAPI running on port 8000?"
+        "Is FastAPI running on port 8002?"
     )
     st.stop()
 

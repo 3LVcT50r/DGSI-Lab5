@@ -207,6 +207,7 @@ def create_purchase_order(session: Session, settings: Settings, purchase_data: P
     payload = {
         "quantity": purchase_data.quantity,
         "product_name": product.name,
+        "retailer_name": settings.retailer_name,
     }
     try:
         with httpx.Client(timeout=10.0) as client:

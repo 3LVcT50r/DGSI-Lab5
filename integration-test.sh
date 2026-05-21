@@ -24,7 +24,7 @@ function invoke_retailer_cli() {
 }
 
 function invoke_factory_cli() {
-    (cd "$FACTORY_CLI_PATH" && python -m src.cli "$@")
+    (cd "$FACTORY_CLI_PATH" && python -m src.cli "$@" --api-url http://localhost:8002/api/v1)
 }
 
 function print_section() {
@@ -50,10 +50,10 @@ echo -e "\n[RETAILER] Catalog:"
 invoke_retailer_cli catalog
 
 echo -e "\n[FACTORY] Current day:"
-#invoke_factory_cli day current
+invoke_factory_cli day current
 
 echo -e "\n[FACTORY] Initial inventory:"
-invoke_factory_cli inventory
+invoke_factory_cli export inventory
 
 # =============================================================================
 # PHASE 2: Retailer Advances 5 Days (Generates Customer Demand)
@@ -107,7 +107,7 @@ echo -e "\n[FACTORY] Check production capacity:"
 invoke_factory_cli capacity
 
 echo -e "\n[FACTORY] Current inventory (raw materials and finished goods):"
-invoke_factory_cli inventory
+invoke_factory_cli export inventory
 
 # =============================================================================
 # PHASE 6: Factory Releases Sales Order to Production
@@ -133,7 +133,7 @@ for i in {1..7}; do
     invoke_factory_cli production status
     
     echo "[FAC-DAY $i] Factory inventory after production:"
-    invoke_factory_cli inventory
+    invoke_factory_cli export inventory
     
     sleep 0.3
 done
@@ -159,7 +159,7 @@ echo -e "\n[FACTORY] Final day:"
 invoke_factory_cli day current
 
 echo -e "\n[FACTORY] Final inventory:"
-invoke_factory_cli inventory
+invoke_factory_cli export inventory
 
 echo -e "\n[FACTORY] Final sales orders:"
 invoke_factory_cli sales orders

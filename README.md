@@ -45,43 +45,41 @@ pip install -r requirements.txt
 
 ## 🕹️ Cómo Ejecutar el Simulador
 
-El software está dividido en dos grandes "cerebros". Tienes que tener tanto la parte lógica encendida (FastAPI) como la parte gráfica encendida (Streamlit). Para ello, **necesitas abrir dos terminales separadas.**
+El software ahora está diseñado como una arquitectura de microservicios distribuidos. Necesitas ejecutar cada componente de la cadena de suministro por separado para que puedan comunicarse a través de la red.
 
-### 1️⃣ Levantar el Servidor Backend (API)
-Abre la primera terminal, asegúrate de activar tu entorno virtual (`source venv/bin/activate`) e inicia el motor con:
+### 1️⃣ Levantar los Microservicios
+
+Abre tres terminales independientes. En cada una, asegúrate de activar tu entorno virtual (`source venv/bin/activate`) e inicia el servicio correspondiente en su puerto asignado:
+
+**Terminal 1 (Provider / Proveedor de Piezas):**
 ```bash
-uvicorn src.main:app --port 8000
-```
-Tambien se puede usar la cli para ejecutar el servidor:
-!!!!!!!! Si sale el error /usr/bin/env: ‘bash\r’: No such file or directory el archivo debe cambiarse de CLRF a LF (abajo derecha en vscode)
-
-Si no se pudiera se pueden ejecutar todos los comandos entrando al directorio factory-app o provider -app y ejecutando allí "python -m src.cli serve port 8000"
-
-```
-./manufacturer-cli serve --port 8000
-```
-Y en otra terminal: 
-```
 ./provider-cli serve --port 8001
 ```
-> El backend quedará ejecutándose en segundo plano exponiendo todos sus servicios en el puerto 8000. Además, puedes interactuar directamente con toda su documentación Swagger en `http://localhost:8000/docs`. No la cierres.
 
-### 2️⃣ Levantar el Panel Visual (Dashboard Frontend)
-Abre una **segunda terminal**, vuelve a activar el entorno y manda arrancar el renderizado web visual:
+**Terminal 2 (Manufacturer / Fábrica de Impresoras):**
 ```bash
-streamlit run factory-app/src/ui/app.py
+./manufacturer-cli serve --port 8002
 ```
-> Tu navegador abrirá automáticamente el panel visual en `http://localhost:8501`.
+
+**Terminal 3 (Retailer / Tienda Minorista):**
+```bash
+./retailer-cli serve --port 8003
+```
+
+*(Opcional: Si lo deseas, puedes seguir usando la interfaz gráfica de la fábrica en otra terminal ejecutando `streamlit run factory-app/src/ui/app.py` en el puerto 8501).*
 
 ---
 
-## 🎮 Guía Rápida para Probar el Sistema (Mini-Tutorial)
+## 🎮 El Turn Engine (Motor de Turnos)
 
-Una vez en el dashboard del navegador `http://localhost:8501`:
+Una vez que los tres microservicios (Proveedor, Fabricante y Minorista) están funcionando en segundo plano, la simulación de la cadena de suministro se avanza de forma sincronizada mediante el **Turn Engine**.
 
-1. Acabas de entrar en el **Día 0**. Notarás que aunque le des al botón `Advance Day`, se generan pedidos y caen a la cola (**Pending Manufacturing Orders**), pero automáticamente pasan de estado `pending` a `waiting_for_materials`. Esto ocurre porque tu **Inventario (tabla derecha)** está seco.
-2. Vete al menú lateral de **Purchasing** (Compras). Selecciona uno de tus proveedores (por ejemplo, *Componentes ABC*) y selecciona algún producto para comprarle (Ej: *kit_piezas*). Fíjate en los Lead Times (algunos tardan 3 o incluso 7 días en llegar desde Europa/Asia). Dale a `Issue PO` para gastar el dinero.
-3. Observa tu pequeña tabla de **Open Purchase Orders**. Se quedará ahí estática la "promesa de entrega" hasta que hayan pasado los días acordados.
-4. Pulsa varias veces de nuevo **Advance Day**. En el instante en el que virtualmente cruces la fecha acordada (ej. `expected_delivery` = Día 4), un camión de mercancía descargará tu pedido y verás tu Stock inflarse por fin en la tabla de Inventario.
-5. Inmediatamente, el cerebro de la fábrica de impresoras comprobará qué pedidos atascados (los *waiting_for_materials*) cumplen con las piezas recién llegadas, y deducirá individualmente placa por placa, cable por cable los sub-módulos hasta vaciarte las estanterías (pasando esos pedidos a `in_progress` o `completed`).
-6. Observa la gráfica animada **📈 Charts** al fondo del todo: muestra numéricamente tu evolución y desempeño logístico conforma más entregas despachas en el tiempo.
+El Turn Engine es un script que inyecta la demanda de clientes en la tienda minorista y luego orquesta que cada microservicio tome sus decisiones diarias antes de avanzar todos al siguiente día.
+
+Para ejecutar una simulación de varios días (por ejemplo, 5 días), abre una cuarta terminal, activa tu entorno y ejecuta:
+
+```bash
+python turn_engine.py config/sim.json scenarios/smoke-test.json 5
+```
+
+En la salida de la consola verás cómo el Turn Engine avanza día a día: generará pedidos de usuarios finales, ejecutará el turno de cada agente involucrado, y hará avanzar las manecillas del tiempo en las bases de datos de todos los microservicios simultáneamente a través de sus APIs REST `v1`.

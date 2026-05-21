@@ -296,7 +296,7 @@ async def advance_day(session: Session) -> Dict[str, Any]:
     try:
         await provider_service.advance_day()
         # Get all orders from provider that are delivered
-        provider_orders = await provider_service.get_orders(status="Delivered")
+        provider_orders = await provider_service.get_orders(status="delivered")
         for provider_order in provider_orders:
             # Find local PO with this provider_order_id
             local_po = session.query(PurchaseOrder).filter(
