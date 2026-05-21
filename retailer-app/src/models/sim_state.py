@@ -3,7 +3,8 @@ from src.models.base import Base
 
 
 class SimState(Base):
-    """Singleton tracking global simulation state."""
+    """Current simulated day."""
+
     __tablename__ = "sim_state"
 
     id = Column(Integer, primary_key=True, index=True)

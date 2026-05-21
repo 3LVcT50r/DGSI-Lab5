@@ -1,15 +1,15 @@
+from typing import List
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from src.database import get_db_session
-from src.models.event import Event
+from src.models import Event
 from src.schemas.response import EventRead
 
 router = APIRouter()
 
 
-@router.get("/events")
-def get_events(db: Session = Depends(get_db_session)):
-    """Get all events."""
-    events = db.query(Event).all()
-    return [EventRead.from_orm(event) for event in events]
+@router.get("/events", response_model=List[EventRead])
+def get_events_endpoint(db: Session = Depends(get_db_session)):
+    """List recent event history."""
+    return db.query(Event).order_by(Event.id.desc()).limit(100).all()

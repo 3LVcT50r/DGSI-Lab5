@@ -1,400 +1,258 @@
-"""Command-line interface for the retailer app."""
-
 import argparse
 import json
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Union
 
-import httpx
 import uvicorn
+from sqlalchemy.orm import Session
+
 from src.config import Settings
+from src.database import SessionLocal, engine
+from src.models import Base
+from src.services.seed import seed_database_from_config
+from src.services.retailer import (
+    get_catalog,
+    get_stock,
+    get_customer_orders,
+    get_customer_order,
+    create_customer_order,
+    fulfill_order,
+    backorder_order,
+    get_purchase_orders,
+    get_purchase_order,
+    create_purchase_order,
+    get_current_day,
+    advance_day,
+    export_state,
+    import_state,
+    set_price,
+)
+from src.schemas.request import CustomerOrderCreate, PurchaseCreate, PriceUpdate
 
 
-def serve_app(port: int = 8003) -> None:
-    """Serve the retailer FastAPI app using Uvicorn."""
+def load_settings(config_path: str | None = None) -> Settings:
+    if config_path:
+        os.environ["DEFAULT_CONFIG_PATH"] = config_path
+    return Settings()
+
+
+def _with_session(func):
+    def wrapper(*args, **kwargs):
+        with SessionLocal() as session:
+            return func(session, *args, **kwargs)
+    return wrapper
+
+
+@_with_session
+def catalog(session: Session):
+    items = get_catalog(session)
+    for item in items:
+        print(f"Product {item.id}: {item.name} - {item.description}")
+        print(f"  Wholesale: ${item.manufacturer_price:.2f}, Retail: ${item.retail_price:.2f}\n")
+
+
+@_with_session
+def stock(session: Session):
+    items = get_stock(session)
+    for item in items:
+        print(
+            f"Product {item.product_id}: available={item.quantity_available}, on_hold={item.quantity_on_hold}"
+        )
+
+
+@_with_session
+def customers_orders(session: Session, status: str | None = None):
+    orders = get_customer_orders(session, status)
+    for order in orders:
+        print(
+            f"Order {order.id}: {order.customer_name}, product={order.product_id}, qty={order.quantity}, status={order.status}, created_day={order.created_day}"
+        )
+
+
+@_with_session
+def customers_order(session: Session, order_id: int):
+    order = get_customer_order(session, order_id)
+    if not order:
+        print("Order not found")
+        return
+    print(json.dumps(order.model_dump(), indent=2, default=str))
+
+
+@_with_session
+def fulfill(session: Session, order_id: int):
+    try:
+        order = fulfill_order(session, order_id)
+        print(f"Fulfilled order {order.id} (status={order.status})")
+    except ValueError as exc:
+        print(f"Error: {exc}")
+
+
+@_with_session
+def backorder(session: Session, order_id: int):
+    try:
+        order = backorder_order(session, order_id)
+        print(f"Backordered order {order.id} (status={order.status})")
+    except ValueError as exc:
+        print(f"Error: {exc}")
+
+
+@_with_session
+def purchase_list(session: Session, status: str | None = None):
+    orders = get_purchase_orders(session, status)
+    for order in orders:
+        print(
+            f"PO {order.id}: product={order.product_id}, qty={order.quantity}, status={order.status}, expected_day={order.expected_delivery_day}"
+        )
+
+
+@_with_session
+def purchase_create(session: Session, settings: Settings, product: str, quantity: int):
+    payload = {}
+    try:
+        payload["product_id"] = int(product)
+    except ValueError:
+        payload["product_name"] = product
+    payload["quantity"] = quantity
+    try:
+        order = create_purchase_order(session, settings, PurchaseCreate(**payload))
+        print(f"Created purchase order {order.id} for manufacturer order {order.manufacturer_order_id}")
+    except ValueError as exc:
+        print(f"Error: {exc}")
+
+
+@_with_session
+def set_price_cmd(session: Session, product: str, price: float):
+    payload = {}
+    try:
+        payload["product_id"] = int(product)
+    except ValueError:
+        payload["product_name"] = product
+    payload["price"] = price
+    try:
+        product_data = set_price(session, PriceUpdate(**payload))
+        print(f"Updated retail price for {product_data.name} to ${product_data.retail_price:.2f}")
+    except ValueError as exc:
+        print(f"Error: {exc}")
+
+
+@_with_session
+def day_advance(session: Session, settings: Settings):
+    new_day = advance_day(session, settings)
+    print(f"Advanced to day {new_day}")
+
+
+@_with_session
+def day_current(session: Session):
+    current = get_current_day(session)
+    print(f"Current day: {current}")
+
+
+@_with_session
+def export_cmd(session: Session):
+    data = export_state(session)
+    print(data)
+
+
+@_with_session
+def import_cmd(session: Session, file_path: str):
+    with open(file_path, "r", encoding="utf-8") as input_file:
+        payload = json.load(input_file)
+    import_state(session, json.dumps(payload))
+    print("Imported state successfully.")
+
+
+def init_db(settings: Settings):
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        seed_database_from_config(session, settings.default_seed_path)
+    print("Database initialized and seeded.")
+
+
+def serve(settings: Settings, port: int):
+    if settings.default_config_path.exists():
+        os.environ["DEFAULT_CONFIG_PATH"] = str(settings.default_config_path)
     uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
 
 
-def list_catalog(api_url: str) -> None:
-    """Fetch and print retailer catalog."""
-    url = api_url.rstrip("/") + "/api/v1/catalog"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        catalog = response.json()
-
-    if not catalog:
-        print("No catalog items found.")
-        return
-    print("Retailer Catalog:")
-    for item in catalog:
-        product = item["product"]
-        print(f"Model: {product['name']}")
-        print(f"  Wholesale: ${product['wholesale_price']:.2f}")
-        print(f"  Retail: ${item['retail_price']:.2f}")
-        print()
-
-
-def list_stock(api_url: str) -> None:
-    """Fetch and print current stock levels."""
-    url = api_url.rstrip("/") + "/api/v1/stock"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        stocks = response.json()
-
-    if not stocks:
-        print("No stock items found.")
-        return
-    print("Current Stock:")
-    for stock in stocks:
-        print(f"Product ID {stock['product_id']}: {stock['quantity']} units")
-    print()
-
-
-def list_customer_orders(api_url: str, status: str | None = None) -> None:
-    """List customer orders."""
-    url = api_url.rstrip("/") + "/api/v1/orders"
-    params = {}
-    if status:
-        params["status"] = status
-    
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url, params=params)
-        response.raise_for_status()
-        orders = response.json()
-
-    if not orders:
-        print("No orders found.")
-        return
-    print(f"Customer Orders ({status or 'all'}):")
-    for order in orders:
-        print(f"Order {order['id']}: {order['customer']} ordered {order['quantity']} {order['product_id']} (status: {order['status']})")
-    print()
-
-
-def show_customer_order(api_url: str, order_id: int) -> None:
-    """Show details of a specific customer order."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        order = response.json()
-
-    print(f"Order {order['id']} Details:")
-    print(f"  Customer: {order['customer']}")
-    print(f"  Product ID: {order['product_id']}")
-    print(f"  Quantity: {order['quantity']}")
-    print(f"  Status: {order['status']}")
-    print(f"  Created: Day {order['created_day']}")
-    if order.get('fulfilled_day'):
-        print(f"  Fulfilled: Day {order['fulfilled_day']}")
-    print()
-
-
-def fulfill_order(api_url: str, order_id: int) -> None:
-    """Fulfill a customer order."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}/fulfill"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.post(url)
-        response.raise_for_status()
-        result = response.json()
-
-    print(f"Order {order_id} fulfilled:")
-    print(json.dumps(result, indent=2))
-
-
-def backorder_order(api_url: str, order_id: int) -> None:
-    """Mark a customer order as backordered."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}/backorder"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.post(url)
-        response.raise_for_status()
-        result = response.json()
-
-    print(f"Order {order_id} backordered:")
-    print(json.dumps(result, indent=2))
-
-
-def list_purchase_orders(api_url: str) -> None:
-    """List purchase orders placed with manufacturer."""
-    url = api_url.rstrip("/") + "/api/v1/purchases"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        orders = response.json()
-
-    if not orders:
-        print("No purchase orders found.")
-        return
-    print("Purchase Orders with Manufacturer:")
-    for order in orders:
-        print(f"PO {order['id']}: {order['quantity']} units of product {order['product_id']} (status: {order['status']})")
-    print()
-
-
-def create_purchase_order(api_url: str, model: str, quantity: int) -> None:
-    """Create a purchase order with the manufacturer."""
-    url = api_url.rstrip("/") + "/api/v1/purchases"
-    payload = {"model": model, "quantity": quantity}
-    with httpx.Client(timeout=10.0) as client:
-        response = client.post(url, json=payload)
-        response.raise_for_status()
-        result = response.json()
-
-    print("Purchase order created:")
-    print(json.dumps(result, indent=2))
-
-
-def set_price(api_url: str, model: str, price: float) -> None:
-    """Set retail price for a model."""
-    # This would need a new endpoint, for now just print
-    print(f"Setting price for {model} to ${price:.2f}")
-    print("Note: Price setting not yet implemented in API")
-
-
-def advance_day(api_url: str) -> None:
-    """Advance the simulation by one day."""
-    url = api_url.rstrip("/") + "/api/v1/day/advance"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.post(url)
-        response.raise_for_status()
-        result = response.json()
-        print(f"Day advanced: {json.dumps(result, indent=2)}")
-
-
-def get_current_day(api_url: str) -> None:
-    """Get the current simulation day."""
-    url = api_url.rstrip("/") + "/api/v1/day/current"
-    with httpx.Client(timeout=10.0) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        result = response.json()
-        print(f"Current day: {result['current_day']}")
-
-
-def export_state(api_url: str, output_path: str | None = None) -> None:
-    """Export retailer state to JSON."""
-    # This would need implementation
-    print("Export not yet implemented")
-
-
-def import_state(api_url: str, input_path: str) -> None:
-    """Import retailer state from JSON."""
-    # This would need implementation
-    print("Import not yet implemented")
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Retailer CLI for retailer-app"
-    )
+    parser = argparse.ArgumentParser(description="3D Printer Retailer Simulator CLI")
+    parser.add_argument("--config", type=str, help="Override config file path")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    catalog_parser = subparsers.add_parser("catalog", help="Show product catalog")
-    catalog_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
-
-    stock_parser = subparsers.add_parser("stock", help="Show current stock")
-    stock_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    subparsers.add_parser("catalog", help="List the product catalog")
+    subparsers.add_parser("stock", help="Show current stock")
 
     customers_parser = subparsers.add_parser("customers", help="Customer order commands")
     customers_sub = customers_parser.add_subparsers(dest="subcommand", required=True)
-    
-    customers_orders_parser = customers_sub.add_parser("orders", help="List customer orders")
-    customers_orders_parser.add_argument(
-        "--status",
-        type=str,
-        help="Filter by status (pending, fulfilled, backordered)"
-    )
-    customers_orders_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
-    
-    customers_show_parser = customers_sub.add_parser("order", help="Show customer order details")
-    customers_show_parser.add_argument("order_id", type=int, help="Order ID")
-    customers_show_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
-    
-    customers_fulfill_parser = customers_sub.add_parser("fulfill", help="Fulfill customer order")
-    customers_fulfill_parser.add_argument("order_id", type=int, help="Order ID")
-    customers_fulfill_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
-    
-    customers_backorder_parser = customers_sub.add_parser("backorder", help="Backorder customer order")
-    customers_backorder_parser.add_argument("order_id", type=int, help="Order ID")
-    customers_backorder_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    orders_parser = customers_sub.add_parser("orders", help="List customer orders")
+    orders_parser.add_argument("--status", type=str, help="Filter by status")
+    order_parser = customers_sub.add_parser("order", help="Show a specific order")
+    order_parser.add_argument("order_id", type=int)
+
+    subparsers.add_parser("fulfill", help="Fulfill a customer order").add_argument("order_id", type=int)
+    subparsers.add_parser("backorder", help="Backorder a customer order").add_argument("order_id", type=int)
 
     purchase_parser = subparsers.add_parser("purchase", help="Purchase order commands")
     purchase_sub = purchase_parser.add_subparsers(dest="subcommand", required=True)
-    purchase_list_parser = purchase_sub.add_parser("list", help="List purchase orders")
-    purchase_list_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
-    purchase_create_parser = purchase_sub.add_parser("create", help="Create purchase order")
-    purchase_create_parser.add_argument("--model", required=True, type=str, help="Model name")
-    purchase_create_parser.add_argument("--qty", required=True, type=int, help="Quantity")
-    purchase_create_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    purchase_sub.add_parser("list", help="List purchase orders")
+    purchase_create_parser = purchase_sub.add_parser("create", help="Create a purchase order")
+    purchase_create_parser.add_argument("model", type=str)
+    purchase_create_parser.add_argument("qty", type=int)
 
-    price_parser = subparsers.add_parser("price", help="Price commands")
-    price_sub = price_parser.add_subparsers(dest="subcommand", required=True)
-    price_set_parser = price_sub.add_parser("set", help="Set retail price")
-    price_set_parser.add_argument("--model", required=True, type=str, help="Model name")
-    price_set_parser.add_argument("--price", required=True, type=float, help="Retail price")
-    price_set_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    price_parser = subparsers.add_parser("price", help="Set retail pricing")
+    price_parser.add_argument("model", type=str)
+    price_parser.add_argument("price", type=float)
 
-    day_parser = subparsers.add_parser("day", help="Simulation day commands")
+    day_parser = subparsers.add_parser("day", help="Manage simulation day")
     day_sub = day_parser.add_subparsers(dest="day_command", required=True)
-    day_sub.add_parser("advance", help="Advance the simulation by one day")
-    day_sub.add_parser("current", help="Get current simulation day")
-    day_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    day_sub.add_parser("advance", help="Advance a simulated day")
+    day_sub.add_parser("current", help="Show current simulated day")
 
-    export_parser = subparsers.add_parser("export", help="Export retailer state")
-    export_parser.add_argument(
-        "--output",
-        type=str,
-        help="Output path for the exported JSON file"
-    )
-    export_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    subparsers.add_parser("export", help="Export state to JSON")
+    import_parser = subparsers.add_parser("import", help="Import state from JSON file")
+    import_parser.add_argument("file", help="JSON file path")
 
-    import_parser = subparsers.add_parser("import", help="Import retailer state")
-    import_parser.add_argument(
-        "--input",
-        required=True,
-        type=str,
-        help="JSON file containing state data"
-    )
-    import_parser.add_argument(
-        "--api-url",
-        type=str,
-        default="http://localhost:8003/api/v1",
-        help="Retailer API base URL"
-    )
+    serve_parser = subparsers.add_parser("serve", help="Start the FastAPI server")
+    serve_parser.add_argument("--port", type=int, default=8003)
 
-    serve_parser = subparsers.add_parser("serve", help="Start the REST API server")
-    serve_parser.add_argument("--port", type=int, default=8003, help="Port to serve on")
+    subparsers.add_parser("init_db", help="Initialize the database and seed data")
 
     args = parser.parse_args()
+    settings = load_settings(args.config)
 
     if args.command == "catalog":
-        try:
-            list_catalog(args.api_url)
-        except httpx.HTTPError as exc:
-            print(f"Failed to get catalog: {exc}")
+        catalog()
     elif args.command == "stock":
-        try:
-            list_stock(args.api_url)
-        except httpx.HTTPError as exc:
-            print(f"Failed to get stock: {exc}")
+        stock()
     elif args.command == "customers":
         if args.subcommand == "orders":
-            try:
-                list_customer_orders(args.api_url, args.status)
-            except httpx.HTTPError as exc:
-                print(f"Failed to get orders: {exc}")
+            customers_orders(args.status)
         elif args.subcommand == "order":
-            try:
-                show_customer_order(args.api_url, args.order_id)
-            except httpx.HTTPError as exc:
-                print(f"Failed to get order: {exc}")
-        elif args.subcommand == "fulfill":
-            try:
-                fulfill_order(args.api_url, args.order_id)
-            except httpx.HTTPError as exc:
-                print(f"Failed to fulfill order: {exc}")
-        elif args.subcommand == "backorder":
-            try:
-                backorder_order(args.api_url, args.order_id)
-            except httpx.HTTPError as exc:
-                print(f"Failed to backorder order: {exc}")
+            customers_order(args.order_id)
+    elif args.command == "fulfill":
+        fulfill(args.order_id)
+    elif args.command == "backorder":
+        backorder(args.order_id)
     elif args.command == "purchase":
         if args.subcommand == "list":
-            try:
-                list_purchase_orders(args.api_url)
-            except httpx.HTTPError as exc:
-                print(f"Failed to get purchase orders: {exc}")
+            purchase_list(args.status if hasattr(args, "status") else None)
         elif args.subcommand == "create":
-            try:
-                create_purchase_order(args.api_url, args.model, args.qty)
-            except httpx.HTTPError as exc:
-                print(f"Failed to create purchase order: {exc}")
+            purchase_create(settings, args.model, args.qty)
     elif args.command == "price":
-        if args.subcommand == "set":
-            try:
-                set_price(args.api_url, args.model, args.price)
-            except Exception as exc:
-                print(f"Failed to set price: {exc}")
+        set_price_cmd(args.model, args.price)
     elif args.command == "day":
         if args.day_command == "advance":
-            try:
-                advance_day(args.api_url)
-            except httpx.HTTPError as exc:
-                print(f"Failed to advance day: {exc}")
+            day_advance(settings)
         elif args.day_command == "current":
-            try:
-                get_current_day(args.api_url)
-            except httpx.HTTPError as exc:
-                print(f"Failed to get current day: {exc}")
+            day_current()
     elif args.command == "export":
-        try:
-            export_state(args.api_url, args.output)
-        except Exception as exc:
-            print(f"Failed to export state: {exc}")
+        export_cmd()
     elif args.command == "import":
-        try:
-            import_state(args.api_url, args.input)
-        except Exception as exc:
-            print(f"Failed to import state: {exc}")
+        import_cmd(args.file)
     elif args.command == "serve":
-        serve_app(args.port)
+        serve(settings, args.port)
+    elif args.command == "init_db":
+        init_db(settings)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-"""FastAPI application entry point."""
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,27 +12,22 @@ settings = Settings()
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Startup/shutdown lifecycle handler."""
-    # Startup: create tables and seed DB
     Base.metadata.create_all(bind=engine)
 
     from src.services.seed import seed_database_from_config
     from src.database import SessionLocal
 
     with SessionLocal() as session:
-        seed_database_from_config(
-            session, str(settings.default_seed_path)
-        )
+        seed_database_from_config(session, str(settings.default_seed_path))
 
     yield
-    # Shutdown: nothing needed
 
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
     description=(
-        "REST API for the 3D Printer "
-        "Retailer Simulation System"
+        "REST API for the 3D Printer Retailer Simulation System"
     ),
     lifespan=lifespan,
 )

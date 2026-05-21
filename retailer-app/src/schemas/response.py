@@ -1,64 +1,58 @@
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
 class ProductRead(BaseModel):
-    """Product response."""
     id: int
     name: str
-    wholesale_price: float
+    description: Optional[str]
+    manufacturer_price: float
     retail_price: float
     model_config = ConfigDict(from_attributes=True)
 
 
 class StockRead(BaseModel):
-    """Stock response."""
     product_id: int
-    quantity: float
+    quantity_available: float
+    quantity_on_hold: float
     model_config = ConfigDict(from_attributes=True)
 
 
 class CustomerOrderRead(BaseModel):
-    """Customer order response."""
     id: int
-    customer: str
+    customer_name: str
     product_id: int
     quantity: int
     status: str
     created_day: int
-    fulfilled_day: Optional[int] = None
+    fulfilled_day: Optional[int]
+    total_price: float
     model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderRead(BaseModel):
-    """Purchase order response."""
     id: int
     product_id: int
     quantity: int
-    status: str
     issue_day: int
     expected_delivery_day: int
-    manufacturer_order_id: Optional[int] = None
+    status: str
+    manufacturer_order_id: Optional[int]
     model_config = ConfigDict(from_attributes=True)
 
 
-class CatalogItem(BaseModel):
-    """Catalog item with pricing."""
-    product: ProductRead
-    retail_price: float
-
-
 class DayRead(BaseModel):
-    """Day response."""
     current_day: int
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EventRead(BaseModel):
-    """Event response."""
     id: int
     sim_day: int
     event_type: str
-    entity_type: Optional[str] = None
-    entity_id: Optional[int] = None
-    detail: str
+    entity_type: Optional[str]
+    entity_id: Optional[int]
+    detail: Optional[str]
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
