@@ -11,6 +11,7 @@ class ProductType(str, Enum):
 class ProductBase(BaseModel):
     name: str
     type: ProductType
+    wholesale_price: Optional[float] = None
 
 
 class ProductCreate(ProductBase):
@@ -32,6 +33,12 @@ class SupplierBase(BaseModel):
 
 class ManufacturingOrderBase(BaseModel):
     product_id: int
+    quantity: int
+
+
+class SalesOrderCreate(BaseModel):
+    retailer_name: str
+    product_name: str
     quantity: int
 
 

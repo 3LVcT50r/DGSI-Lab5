@@ -9,6 +9,7 @@ from src.services.simulation import (
     advance_day,
     get_simulation_status,
     reset_simulation,
+    get_capacity_status,
 )
 
 router = APIRouter()
@@ -41,3 +42,9 @@ def post_reset_simulation(
     """Reset simulation to initial configuration."""
     reset_simulation(db)
     return {"status": "reset"}
+
+
+@router.get("/capacity")
+def get_capacity(db: Session = Depends(get_db_session)):
+    """Get daily capacity and utilisation."""
+    return get_capacity_status(db)

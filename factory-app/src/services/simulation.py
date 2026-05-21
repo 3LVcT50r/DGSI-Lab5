@@ -20,6 +20,8 @@ from src.models import (
     SimulationState,
     ManufacturingOrder,
     OrderStatus,
+    SalesOrder,
+    SalesOrderStatus,
     PurchaseOrder,
     PurchaseOrderStatus,
     Product,
@@ -159,19 +161,81 @@ async def advance_day(session: Session) -> Dict[str, Any]:
             },
         )
 
-    # 3. Complete in-progress production
+    # 3. Complete in-progress production based on model duration
     in_progress = session.query(ManufacturingOrder).filter(
         ManufacturingOrder.status == OrderStatus.IN_PROGRESS
     ).with_for_update().all()
 
     for mo in in_progress:
+        # Determine production days from model config
+        model_config = config.get("models", {}).get(mo.product.name, {})
+        assembly_hours = model_config.get("assembly_time_hours", 8)
+        production_days = max(1, int((assembly_hours + 7) // 8))
+
+        if mo.start_date is None:
+            continue
+
+        if mo.start_date + production_days > today:
+            continue
+
         mo.status = OrderStatus.COMPLETED
         mo.completed_date = today
+        # Add the finished product into inventory
+        from src.services.inventory import receive_purchase_order
+        receive_purchase_order(session, mo.product_id, mo.quantity)
+        if mo.sales_order:
+            mo.sales_order.status = SalesOrderStatus.COMPLETED
+            mo.sales_order.completed_date = today
         log_event(
             session,
             EventType.ORDER_COMPLETED,
             today,
-            {"order_id": mo.id, "qty": mo.quantity},
+            {"order_id": mo.id, "sales_order_id": mo.sales_order_id, "qty": mo.quantity},
+        )
+
+    # 3.5 Fulfil sales orders from finished stock
+    from src.models.inventory import Inventory
+    sales_to_fulfil = session.query(SalesOrder).filter(
+        SalesOrder.status.in_( [
+            SalesOrderStatus.RECEIVED,
+            SalesOrderStatus.RELEASED,
+            SalesOrderStatus.COMPLETED,
+        ])
+    ).order_by(SalesOrder.created_date.asc()).with_for_update().all()
+
+    for so in sales_to_fulfil:
+        inv = session.query(Inventory).filter(
+            Inventory.product_id == so.product_id
+        ).with_for_update().first()
+        if not inv or inv.quantity < so.quantity:
+            continue
+
+        inv.quantity -= so.quantity
+        if so.status != SalesOrderStatus.SHIPPED:
+            so.status = SalesOrderStatus.SHIPPED
+            so.shipped_date = today
+            log_event(
+                session,
+                EventType.SALES_ORDER_SHIPPED,
+                today,
+                {
+                    "sales_order_id": so.id,
+                    "product_id": so.product_id,
+                    "qty": so.quantity,
+                },
+            )
+
+        so.status = SalesOrderStatus.DELIVERED
+        so.delivered_date = today
+        log_event(
+            session,
+            EventType.SALES_ORDER_DELIVERED,
+            today,
+            {
+                "sales_order_id": so.id,
+                "product_id": so.product_id,
+                "qty": so.quantity,
+            },
         )
 
     # 4. Start new orders (up to daily capacity)
@@ -260,6 +324,27 @@ async def advance_day(session: Session) -> Dict[str, Any]:
     return {"status": "advanced", "current_day": today}
 
 
+def get_capacity_status(session: Session) -> Dict[str, Any]:
+    """Get daily capacity and utilisation."""
+    settings = Settings()
+    with open(settings.default_config_path, "r") as f:
+        config = json.load(f)
+
+    capacity_per_day = config.get("capacity_per_day", settings.production_capacity_per_day)
+
+    # Current utilisation: sum of in_progress quantities
+    in_progress = session.query(ManufacturingOrder).filter(
+        ManufacturingOrder.status == OrderStatus.IN_PROGRESS
+    ).all()
+    current_utilisation = sum(mo.quantity for mo in in_progress)
+
+    return {
+        "capacity_per_day": capacity_per_day,
+        "current_utilisation": current_utilisation,
+        "available_capacity": capacity_per_day - current_utilisation
+    }
+
+
 def get_simulation_status(session: Session) -> SimulationStatus:
     """Return current summary state for the dashboard."""
     day = get_current_day(session)
@@ -325,31 +410,51 @@ def release_order(
         )
 
     day = get_current_day(session)
-    success, missing_info = reserve_materials(
-        session, mo.product_id, mo.quantity
+    mo.status = OrderStatus.PENDING
+    log_event(
+        session, EventType.ORDER_RELEASED, day,
+        {"order_id": mo.id},
     )
-    if success:
-        consume_materials(
-            session, mo.product_id, mo.quantity
-        )
-        mo.status = OrderStatus.IN_PROGRESS
-        mo.start_date = day
-        log_event(
-            session, EventType.ORDER_RELEASED, day,
-            {"order_id": mo.id},
-        )
-        log_event(
-            session, EventType.MATERIALS_CONSUMED, day,
-            {"order_id": mo.id, "qty": mo.quantity},
-        )
-        session.commit()
-        return ManufacturingOrderRead.model_validate(mo)
-    else:
-        missing_str = ", ".join(missing_info)
+    session.commit()
+    return ManufacturingOrderRead.model_validate(mo)
+
+
+def release_sales_order(
+    session: Session, order_id: int
+) -> SalesOrder:
+    """Release a sales order into production by creating a manufacturing order."""
+    so = session.query(SalesOrder).filter(
+        SalesOrder.id == order_id
+    ).first()
+    if not so:
+        raise ValueError("Sales order not found.")
+    if so.status != SalesOrderStatus.RECEIVED:
         raise ValueError(
-            "Insufficient materials to release order. "
-            f"Missing: {missing_str}"
+            f"Sales order is in status {so.status.value}, "
+            "cannot release."
         )
+
+    day = get_current_day(session)
+    # Create manufacturing order
+    mo = ManufacturingOrder(
+        sales_order_id=so.id,
+        created_date=day,
+        product_id=so.product_id,
+        quantity=so.quantity,
+        status=OrderStatus.PENDING,
+    )
+    session.add(mo)
+    session.flush()
+
+    so.status = SalesOrderStatus.RELEASED
+    so.released_date = day
+
+    log_event(
+        session, EventType.SALES_ORDER_RELEASED, day,
+        {"sales_order_id": so.id, "manufacturing_order_id": mo.id},
+    )
+    session.commit()
+    return so
 
 
 async def create_purchase_order(

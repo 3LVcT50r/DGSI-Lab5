@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, CheckConstraint, Enum as SAEnum
+from sqlalchemy import Column, Integer, String, CheckConstraint, Enum as SAEnum, Float
 from sqlalchemy.orm import relationship
 from src.models.base import Base
 
@@ -17,6 +17,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
     type: Column[ProductType] = Column(SAEnum(ProductType), nullable=False)
+    wholesale_price = Column(Float, nullable=True)  # Only for finished products
 
     __table_args__ = (
         CheckConstraint("type IN ('RAW', 'FINISHED')", name="ck_product_type"),

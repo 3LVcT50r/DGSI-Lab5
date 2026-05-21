@@ -49,6 +49,22 @@ class ManufacturingOrderRead(ManufacturingOrderBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SalesOrderRead(BaseModel):
+    """Sales order response."""
+    id: int
+    created_date: int
+    retailer_name: str
+    product_id: int
+    quantity: int
+    status: str
+    released_date: Optional[int] = None
+    start_date: Optional[int] = None
+    completed_date: Optional[int] = None
+    shipped_date: Optional[int] = None
+    delivered_date: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PurchaseOrderRead(BaseModel):
     """Purchase order response."""
     id: int
