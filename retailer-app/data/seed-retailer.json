@@ -1,0 +1,25 @@
+{
+  "products": [
+    {
+      "name": "P3D-Classic",
+      "description": "Entry-level desktop 3D printer",
+      "manufacturer_price": 280.0,
+      "retail_price": 364.0,
+      "initial_stock": 12
+    },
+    {
+      "name": "P3D-Pro",
+      "description": "Professional printer for advanced makers",
+      "manufacturer_price": 420.0,
+      "retail_price": 483.0,
+      "initial_stock": 8
+    },
+    {
+      "name": "P3D-Mini",
+      "description": "Compact printer for small workspaces",
+      "manufacturer_price": 220.0,
+      "retail_price": 253.0,
+      "initial_stock": 15
+    }
+  ]
+}
