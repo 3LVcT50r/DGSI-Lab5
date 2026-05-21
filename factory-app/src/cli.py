@@ -34,7 +34,7 @@ def find_provider(providers: List[Dict[str, Any]], name: str) -> Dict[str, Any]:
 
 def print_provider_catalog(provider: Dict[str, Any]) -> None:
     """Fetch and print provider catalog from provider API."""
-    url = provider["url"] + "/api/v1/catalog"
+    url = provider["url"] + "/api/catalog"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -60,7 +60,7 @@ def create_purchase_order(provider: Dict[str, Any], product_identifier: Union[st
         product_identifier: Product ID (int) or product name (str)
         quantity: Order quantity
     """
-    url = provider["url"].rstrip("/") + "/api/v1/orders"
+    url = provider["url"].rstrip("/") + "/api/orders"
     
     # Build payload with either product_id or product_name
     payload = {"quantity": quantity}
@@ -78,14 +78,14 @@ def create_purchase_order(provider: Dict[str, Any], product_identifier: Union[st
         return response.json()
 
 
-def serve_app(port: int = 8000) -> None:
+def serve_app(port: int = 8002) -> None:
     """Serve the factory FastAPI app using Uvicorn."""
     uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
 
 
 def list_provider_orders(provider: Dict[str, Any]) -> List[Dict[str, Any]]:
     """List all orders from a provider."""
-    url = provider["url"].rstrip("/") + "/api/v1/orders"
+    url = provider["url"].rstrip("/") + "/api/orders"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -209,7 +209,7 @@ def main() -> None:
     export_inventory_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
     export_events_parser = export_sub.add_parser("events", help="Export event history")
@@ -221,7 +221,7 @@ def main() -> None:
     export_events_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
 
@@ -237,7 +237,7 @@ def main() -> None:
     import_inventory_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
     import_events_parser = import_sub.add_parser("events", help="Import event history")
@@ -250,7 +250,7 @@ def main() -> None:
     import_events_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
 
@@ -263,7 +263,7 @@ def main() -> None:
     stock_set_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
     stock_init_parser = stock_sub.add_parser("initialize", help="Initialize inventory from JSON file")
@@ -271,12 +271,12 @@ def main() -> None:
     stock_init_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
 
     serve_parser = subparsers.add_parser("serve", help="Start the REST API server")
-    serve_parser.add_argument("--port", type=int, default=8000, help="Port to serve on")
+    serve_parser.add_argument("--port", type=int, default=8002, help="Port to serve on")
 
     day_parser = subparsers.add_parser("day", help="Simulation day commands")
     day_sub = day_parser.add_subparsers(dest="day_command", required=True)
@@ -284,7 +284,7 @@ def main() -> None:
     day_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api",
         help="Factory API base URL"
     )
 

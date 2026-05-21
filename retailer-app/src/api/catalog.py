@@ -11,3 +11,9 @@ router = APIRouter()
 def get_catalog_endpoint(db: Session = Depends(get_db_session)):
     """Get the product catalog with retail prices."""
     return get_catalog(db)
+
+@router.put("/catalog/{model}/price")
+def set_price_endpoint(model: str, price: float, db: Session = Depends(get_db_session)):
+    """Set retail price for a product."""
+    from src.services.retailer import set_price
+    return set_price(db, model, price)

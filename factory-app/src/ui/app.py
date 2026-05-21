@@ -4,8 +4,8 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
-API_URL = "http://localhost:8002/api/v1"
-PROVIDER_API_URL = "http://localhost:8001/api/v1"
+API_URL = "http://localhost:8002/api"
+PROVIDER_API_URL = "http://localhost:8001/api"
 
 st.set_page_config(
     page_title="3D Printer Factory Simulator",

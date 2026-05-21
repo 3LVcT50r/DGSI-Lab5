@@ -47,7 +47,7 @@ def generate_customer_orders(retailer_url: str, retailer_name: str, signal: Dict
     
     # Get catalog from retailer
     try:
-        response = httpx.get(f"{retailer_url}/api/v1/catalog")
+        response = httpx.get(f"{retailer_url}/api/catalog")
         response.raise_for_status()
         catalog = response.json()
     except Exception as exc:
@@ -68,7 +68,7 @@ def generate_customer_orders(retailer_url: str, retailer_name: str, signal: Dict
                 "quantity": 1
             }
             try:
-                httpx.post(f"{retailer_url}/api/v1/orders", json=payload)
+                httpx.post(f"{retailer_url}/api/orders", json=payload)
             except Exception as exc:
                 logger.warning(f"Failed to post order to {retailer_url}: {exc}")
 
@@ -111,14 +111,14 @@ def advance_all(config: Dict[str, Any]) -> None:
     """Advance all apps to the next day."""
     urls_with_endpoints = []
     for r in config.get("retailers", []):
-        urls_with_endpoints.append((r["url"], "/api/v1/day/advance"))
+        urls_with_endpoints.append((r["url"], "/api/day/advance"))
     
     manuf = config.get("manufacturer")
     if manuf:
-        urls_with_endpoints.append((manuf["url"], "/api/v1/simulate/advance"))
+        urls_with_endpoints.append((manuf["url"], "/api/simulate/advance"))
         
     for p in config.get("providers", []):
-        urls_with_endpoints.append((p["url"], "/api/v1/day/advance"))
+        urls_with_endpoints.append((p["url"], "/api/day/advance"))
 
     for url, endpoint in urls_with_endpoints:
         try:

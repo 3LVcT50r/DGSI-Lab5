@@ -13,3 +13,10 @@ router = APIRouter()
 def get_stock_endpoint(db: Session = Depends(get_db_session)):
     """Get current stock levels."""
     return get_stock(db)
+
+@router.post("/stock/restock")
+def restock_endpoint(product_id: int, quantity: float, db: Session = Depends(get_db_session)):
+    """Add stock to a product."""
+    from src.services.provider import restock
+    restock(db, product_id, quantity)
+    return {"status": "success"}

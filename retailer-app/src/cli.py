@@ -17,7 +17,7 @@ def serve_app(port: int = 8003) -> None:
 
 def list_catalog(api_url: str) -> None:
     """Fetch and print retailer catalog."""
-    url = api_url.rstrip("/") + "/api/v1/catalog"
+    url = api_url.rstrip("/") + "/catalog"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -37,7 +37,7 @@ def list_catalog(api_url: str) -> None:
 
 def list_stock(api_url: str) -> None:
     """Fetch and print current stock levels."""
-    url = api_url.rstrip("/") + "/api/v1/stock"
+    url = api_url.rstrip("/") + "/stock"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -54,7 +54,7 @@ def list_stock(api_url: str) -> None:
 
 def list_customer_orders(api_url: str, status: str | None = None) -> None:
     """List customer orders."""
-    url = api_url.rstrip("/") + "/api/v1/orders"
+    url = api_url.rstrip("/") + "/orders"
     params = {}
     if status:
         params["status"] = status
@@ -75,7 +75,7 @@ def list_customer_orders(api_url: str, status: str | None = None) -> None:
 
 def show_customer_order(api_url: str, order_id: int) -> None:
     """Show details of a specific customer order."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}"
+    url = api_url.rstrip("/") + f"/orders/{order_id}"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -94,7 +94,7 @@ def show_customer_order(api_url: str, order_id: int) -> None:
 
 def fulfill_order(api_url: str, order_id: int) -> None:
     """Fulfill a customer order."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}/fulfill"
+    url = api_url.rstrip("/") + f"/orders/{order_id}/fulfill"
     with httpx.Client(timeout=10.0) as client:
         response = client.post(url)
         response.raise_for_status()
@@ -106,7 +106,7 @@ def fulfill_order(api_url: str, order_id: int) -> None:
 
 def backorder_order(api_url: str, order_id: int) -> None:
     """Mark a customer order as backordered."""
-    url = api_url.rstrip("/") + f"/api/v1/orders/{order_id}/backorder"
+    url = api_url.rstrip("/") + f"/orders/{order_id}/backorder"
     with httpx.Client(timeout=10.0) as client:
         response = client.post(url)
         response.raise_for_status()
@@ -118,7 +118,7 @@ def backorder_order(api_url: str, order_id: int) -> None:
 
 def list_purchase_orders(api_url: str) -> None:
     """List purchase orders placed with manufacturer."""
-    url = api_url.rstrip("/") + "/api/v1/purchases"
+    url = api_url.rstrip("/") + "/purchases"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -135,7 +135,7 @@ def list_purchase_orders(api_url: str) -> None:
 
 def create_purchase_order(api_url: str, model: str, quantity: int) -> None:
     """Create a purchase order with the manufacturer."""
-    url = api_url.rstrip("/") + "/api/v1/purchases"
+    url = api_url.rstrip("/") + "/purchases"
     payload = {"model": model, "quantity": quantity}
     with httpx.Client(timeout=10.0) as client:
         response = client.post(url, json=payload)
@@ -148,14 +148,19 @@ def create_purchase_order(api_url: str, model: str, quantity: int) -> None:
 
 def set_price(api_url: str, model: str, price: float) -> None:
     """Set retail price for a model."""
-    # This would need a new endpoint, for now just print
-    print(f"Setting price for {model} to ${price:.2f}")
-    print("Note: Price setting not yet implemented in API")
+    url = api_url.rstrip("/") + f"/catalog/{model}/price"
+    params = {"price": price}
+    with httpx.Client(timeout=10.0) as client:
+        response = client.put(url, params=params)
+        response.raise_for_status()
+        result = response.json()
+    print(f"Price for {model} set to ${price:.2f}")
+    print(json.dumps(result, indent=2))
 
 
 def advance_day(api_url: str) -> None:
     """Advance the simulation by one day."""
-    url = api_url.rstrip("/") + "/api/v1/day/advance"
+    url = api_url.rstrip("/") + "/day/advance"
     with httpx.Client(timeout=10.0) as client:
         response = client.post(url)
         response.raise_for_status()
@@ -165,7 +170,7 @@ def advance_day(api_url: str) -> None:
 
 def get_current_day(api_url: str) -> None:
     """Get the current simulation day."""
-    url = api_url.rstrip("/") + "/api/v1/day/current"
+    url = api_url.rstrip("/") + "/day/current"
     with httpx.Client(timeout=10.0) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -175,14 +180,29 @@ def get_current_day(api_url: str) -> None:
 
 def export_state(api_url: str, output_path: str | None = None) -> None:
     """Export retailer state to JSON."""
-    # This would need implementation
-    print("Export not yet implemented")
+    url = api_url.rstrip("/") + "/export"
+    with httpx.Client(timeout=10.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        result = response.json()
+    
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as out_file:
+            json.dump(result, out_file, indent=2)
+        print(f"Exported state to {output_path}")
+    else:
+        print(json.dumps(result, indent=2))
 
 
 def import_state(api_url: str, input_path: str) -> None:
     """Import retailer state from JSON."""
-    # This would need implementation
-    print("Import not yet implemented")
+    url = api_url.rstrip("/") + "/import"
+    with open(input_path, "rb") as in_file:
+        files = {"file": (Path(input_path).name, in_file, "application/json")}
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(url, files=files)
+            response.raise_for_status()
+            print(json.dumps(response.json(), indent=2))
 
 
 def main() -> None:
@@ -195,7 +215,7 @@ def main() -> None:
     catalog_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -203,7 +223,7 @@ def main() -> None:
     stock_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -219,7 +239,7 @@ def main() -> None:
     customers_orders_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
     
@@ -228,7 +248,7 @@ def main() -> None:
     customers_show_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
     
@@ -237,7 +257,7 @@ def main() -> None:
     customers_fulfill_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
     
@@ -246,7 +266,7 @@ def main() -> None:
     customers_backorder_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -256,7 +276,7 @@ def main() -> None:
     purchase_list_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
     purchase_create_parser = purchase_sub.add_parser("create", help="Create purchase order")
@@ -265,7 +285,7 @@ def main() -> None:
     purchase_create_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -277,7 +297,7 @@ def main() -> None:
     price_set_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -288,7 +308,7 @@ def main() -> None:
     day_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -301,7 +321,7 @@ def main() -> None:
     export_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
@@ -315,7 +335,7 @@ def main() -> None:
     import_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8003/api/v1",
+        default="http://localhost:8003/api",
         help="Retailer API base URL"
     )
 
