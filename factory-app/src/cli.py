@@ -278,10 +278,45 @@ def main() -> None:
     serve_parser = subparsers.add_parser("serve", help="Start the REST API server")
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to serve on")
 
-    day_parser = subparsers.add_parser("day", help="Simulation day commands")
-    day_sub = day_parser.add_subparsers(dest="day_command", required=True)
-    day_sub.add_parser("advance", help="Advance the simulation by one day")
-    day_parser.add_argument(
+    sales_parser = subparsers.add_parser("sales", help="Sales order commands")
+    sales_sub = sales_parser.add_subparsers(dest="subcommand", required=True)
+    sales_sub.add_parser("orders", help="List sales orders")
+    sales_order_parser = sales_sub.add_parser("order", help="Get sales order details")
+    sales_order_parser.add_argument("id", type=int, help="Sales order ID")
+    sales_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8000/api/v1",
+        help="Factory API base URL"
+    )
+
+    production_parser = subparsers.add_parser("production", help="Production commands")
+    production_sub = production_parser.add_subparsers(dest="subcommand", required=True)
+    production_release_parser = production_sub.add_parser("release", help="Release a sales order to production")
+    production_release_parser.add_argument("order_id", type=int, help="Sales order ID")
+    production_sub.add_parser("status", help="Show current production status")
+    production_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8000/api/v1",
+        help="Factory API base URL"
+    )
+
+    capacity_parser = subparsers.add_parser("capacity", help="Show daily capacity and utilisation")
+    capacity_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8000/api/v1",
+        help="Factory API base URL"
+    )
+
+    price_parser = subparsers.add_parser("price", help="Price commands")
+    price_sub = price_parser.add_subparsers(dest="subcommand", required=True)
+    price_list_parser = price_sub.add_parser("list", help="List wholesale prices")
+    price_set_parser = price_sub.add_parser("set", help="Set wholesale price")
+    price_set_parser.add_argument("model", type=str, help="Product model name")
+    price_set_parser.add_argument("price", type=float, help="Price")
+    price_parser.add_argument(
         "--api-url",
         type=str,
         default="http://localhost:8000/api/v1",
@@ -381,6 +416,84 @@ def main() -> None:
                 print(f"Failed to advance day: {exc}")
     elif args.command == "serve":
         serve_app(args.port)
+    elif args.command == "sales":
+        if args.subcommand == "orders":
+            try:
+                url = args.api_url.rstrip("/") + "/sales-orders"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    orders = response.json()
+                    for order in orders:
+                        print(f"ID: {order['id']}, Retailer: {order['retailer_name']}, Model: {order['product_id']}, Qty: {order['quantity']}, Status: {order['status']}")
+            except httpx.HTTPError as exc:
+                print(f"Failed to get sales orders: {exc}")
+        elif args.subcommand == "order":
+            try:
+                url = args.api_url.rstrip("/") + f"/sales-orders/{args.id}"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    order = response.json()
+                    print(json.dumps(order, indent=2))
+            except httpx.HTTPError as exc:
+                print(f"Failed to get sales order: {exc}")
+    elif args.command == "production":
+        if args.subcommand == "release":
+            try:
+                url = args.api_url.rstrip("/") + f"/sales-orders/{args.order_id}/release"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.post(url)
+                    response.raise_for_status()
+                    print("Sales order released to production")
+            except httpx.HTTPError as exc:
+                print(f"Failed to release order: {exc}")
+        elif args.subcommand == "status":
+            try:
+                url = args.api_url.rstrip("/") + "/production/orders"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    orders = response.json()
+                    for order in orders:
+                        print(f"ID: {order['id']}, Product: {order['product_id']}, Qty: {order['quantity']}, Status: {order['status']}")
+            except httpx.HTTPError as exc:
+                print(f"Failed to get production status: {exc}")
+    elif args.command == "capacity":
+        try:
+            url = args.api_url.rstrip("/") + "/capacity"
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url)
+                response.raise_for_status()
+                cap = response.json()
+                print(f"Capacity per day: {cap['capacity_per_day']}")
+                print(f"Current utilisation: {cap['current_utilisation']}")
+                print(f"Available capacity: {cap['available_capacity']}")
+        except httpx.HTTPError as exc:
+            print(f"Failed to get capacity: {exc}")
+    elif args.command == "price":
+        if args.subcommand == "list":
+            try:
+                url = args.api_url.rstrip("/") + "/pricing"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    products = response.json()
+                    for prod in products:
+                        price = prod.get('wholesale_price', 'Not set')
+                        print(f"{prod['name']}: ${price}")
+            except httpx.HTTPError as exc:
+                print(f"Failed to get price list: {exc}")
+        elif args.subcommand == "set":
+            try:
+                url = args.api_url.rstrip("/") + f"/pricing/{args.model}"
+                payload = {"price": args.price}
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.put(url, json=payload)
+                    response.raise_for_status()
+                    print("Price updated")
+            except httpx.HTTPError as exc:
+                print(f"Failed to set price: {exc}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
   "models": {
     "P3D-Classic": {
       "assembly_time_hours": 4,
+      "wholesale_price": 150.0,
       "bom": {
         "kit_piezas": 1,
         "pcb": 1,
@@ -22,6 +23,7 @@
     },
     "P3D-Pro": {
       "assembly_time_hours": 6,
+      "wholesale_price": 250.0,
       "bom": {
         "kit_piezas": 1,
         "pcb": 1,
