@@ -121,6 +121,13 @@ def purchase_create(session: Session, settings: Settings, product: str, quantity
 
 
 @_with_session
+def price_list_cmd(session: Session):
+    items = get_catalog(session)
+    for item in items:
+        print(f"{item.name}: wholesale=${item.manufacturer_price:.2f}, retail=${item.retail_price:.2f}")
+
+
+@_with_session
 def set_price_cmd(session: Session, product: str, price: float):
     payload = {}
     try:
@@ -199,9 +206,12 @@ def main() -> None:
     purchase_create_parser.add_argument("model", type=str)
     purchase_create_parser.add_argument("qty", type=int)
 
-    price_parser = subparsers.add_parser("price", help="Set retail pricing")
-    price_parser.add_argument("model", type=str)
-    price_parser.add_argument("price", type=float)
+    price_parser = subparsers.add_parser("price", help="Retail pricing commands")
+    price_sub = price_parser.add_subparsers(dest="price_command", required=True)
+    price_sub.add_parser("list", help="List retail prices for all products")
+    price_set_parser = price_sub.add_parser("set", help="Set retail price for a product")
+    price_set_parser.add_argument("model", type=str)
+    price_set_parser.add_argument("price", type=float)
 
     day_parser = subparsers.add_parser("day", help="Manage simulation day")
     day_sub = day_parser.add_subparsers(dest="day_command", required=True)
@@ -239,7 +249,10 @@ def main() -> None:
         elif args.subcommand == "create":
             purchase_create(settings, args.model, args.qty)
     elif args.command == "price":
-        set_price_cmd(args.model, args.price)
+        if args.price_command == "list":
+            price_list_cmd()
+        elif args.price_command == "set":
+            set_price_cmd(args.model, args.price)
     elif args.command == "day":
         if args.day_command == "advance":
             day_advance(settings)

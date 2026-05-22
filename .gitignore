@@ -1,10 +1,16 @@
 .env
+env
 .venv/*
 venv/*
 *.sqlite
+*.db
 __pycache__/*
+**/__pycache__/
 .pytest_cache/*
 *.pyc
 .coverage
 .pytest_cache
 *.log
+logs/
+**/data/*_metrics.csv
+.mypy_cache/

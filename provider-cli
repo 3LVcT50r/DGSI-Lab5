@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Wrapper for running the provider-app CLI from the workspace root on Linux/macOS.
 # It changes into provider-app and sets PYTHONPATH so python can locate src.
+# Uses the project venv if present.
 
-cd "$(dirname "$0")/provider-app" || exit 1
-PYTHONPATH="." python -m src.cli "$@"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT/provider-app" || exit 1
+PY="$ROOT/venv/bin/python"
+[ -x "$PY" ] || PY="python"
+PYTHONPATH="." "$PY" -m src.cli "$@"
