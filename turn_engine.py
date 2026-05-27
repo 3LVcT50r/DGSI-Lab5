@@ -162,7 +162,16 @@ def run_agent_or_stub(
             "Execute your daily decisions following the skill's decision framework.\n"
             "Do NOT advance the day — the turn engine does that."
         )
-        cmd = ["claude", "--print", "--prompt", prompt]
+        # `claude --print "<prompt>"` runs non-interactively. We bypass the
+        # permission prompt because the skills tell the agent to invoke its
+        # role's shell CLI (./retailer-cli, ./manufacturer-cli, ./provider-cli);
+        # in non-interactive mode there is nobody to confirm a Bash prompt.
+        cmd = [
+            "claude",
+            "--print",
+            "--dangerously-skip-permissions",
+            prompt,
+        ]
         mode = "claude"
     else:
         mock_path = str(PROJECT_ROOT / "mock_agent.py")
