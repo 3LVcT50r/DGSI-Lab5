@@ -213,7 +213,7 @@ def day_current():
 def serve(port: int = 8001):
     """Start the FastAPI server."""
     import uvicorn
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=False)
 
 
 @app.command()

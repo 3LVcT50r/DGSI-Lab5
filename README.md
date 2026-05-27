@@ -52,6 +52,14 @@ cd factory-app && PYTHONPATH=. python -m src.cli serve --port 8002
 cd retailer-app && PYTHONPATH=. python -m src.cli serve --port 8003
 ```
 
+### Streamlit
+
+```bash
+
+streamlit run factory-app/src/ui/app.py
+
+```
+
 Health check:
 
 ```bash

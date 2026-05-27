@@ -80,7 +80,7 @@ def create_purchase_order(provider: Dict[str, Any], product_identifier: Union[st
 
 def serve_app(port: int = 8000) -> None:
     """Serve the factory FastAPI app using Uvicorn."""
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=False)
 
 
 def list_provider_orders(provider: Dict[str, Any]) -> List[Dict[str, Any]]:

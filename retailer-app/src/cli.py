@@ -178,7 +178,7 @@ def init_db(settings: Settings):
 def serve(settings: Settings, port: int):
     if settings.default_config_path.exists():
         os.environ["DEFAULT_CONFIG_PATH"] = str(settings.default_config_path)
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=False)
 
 
 def main() -> None:

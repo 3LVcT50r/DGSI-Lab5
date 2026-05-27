@@ -180,10 +180,8 @@ def advance_day(session: Session) -> int:
     if not sim_state:
         sim_state = SimState(current_day=0)
         session.add(sim_state)
+    # Day being closed out (stored last-completed + 1).
     current_day = sim_state.current_day + 1
-    sim_state.current_day = current_day
-    
-    
 
     # Move confirmed orders to in progress
     orders_to_finish = session.query(Order).filter(
@@ -281,6 +279,7 @@ def advance_day(session: Session) -> int:
     session.add(event)
 
     snapshot_metrics(session, current_day)
+    sim_state.current_day = current_day  # mark day complete AFTER snapshot.
 
     session.commit()
     return current_day
@@ -330,9 +329,14 @@ def snapshot_metrics(session: Session, sim_day: int) -> None:
 
 
 def get_current_day(session: Session) -> int:
-    """Get the current simulated day."""
+    """Return the day currently in progress (stored + 1).
+
+    Stored value is the last completed day, so events that happen before
+    `advance_day` runs get tagged with the in-progress day instead of
+    yesterday.
+    """
     sim_state = session.query(SimState).first()
-    return sim_state.current_day if sim_state else 0
+    return (sim_state.current_day + 1) if sim_state else 1
 
 
 def reset_simulation(session: Session) -> None:

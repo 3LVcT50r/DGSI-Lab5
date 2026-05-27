@@ -135,9 +135,9 @@ def snapshot_metrics(session: Session, sim_day: int) -> None:
 
 
 def get_current_day(session: Session) -> int:
-    """Return the current simulation day."""
+    """Return the day currently in progress (stored last-completed + 1)."""
     state = session.query(SimulationState).first()
-    return state.current_day if state else 0
+    return (state.current_day + 1) if state else 1
 
 
 def generate_demand(
@@ -204,9 +204,10 @@ async def advance_day(session: Session) -> Dict[str, Any]:
             "Simulation state not initialized."
         )
 
-    # 1. Update day counter
-    state.current_day += 1
-    today = state.current_day
+    # 1. Resolve "today" = the day we're closing out. We bump state.current_day
+    #    at the END of this function so anything that runs in between (and
+    #    queries get_current_day) sees the correct in-progress day.
+    today = state.current_day + 1
 
     with open(settings.default_config_path, "r") as f:
         config = json.load(f)
@@ -260,7 +261,6 @@ async def advance_day(session: Session) -> Dict[str, Any]:
         mo.status = OrderStatus.COMPLETED
         mo.completed_date = today
         # Add the finished product into inventory
-        from src.services.inventory import receive_purchase_order
         receive_purchase_order(session, mo.product_id, mo.quantity)
         if mo.sales_order:
             mo.sales_order.status = SalesOrderStatus.COMPLETED
@@ -376,22 +376,16 @@ async def advance_day(session: Session) -> Dict[str, Any]:
                 },
             )
 
-    # 5. Generate demand for next simulation cycle
-    generate_demand(session, today, settings)
-
-    # 6. Advance provider day and check for deliveries
+    # 5. Poll provider for already-delivered orders and receive materials.
+    #    We do NOT advance the provider's day — the turn engine handles that.
     provider_service = get_provider_service(settings)
     try:
-        await provider_service.advance_day()
-        # Get all orders from provider that are delivered
         provider_orders = await provider_service.get_orders(status="delivered")
         for provider_order in provider_orders:
-            # Find local PO with this provider_order_id
             local_po = session.query(PurchaseOrder).filter(
                 PurchaseOrder.provider_order_id == provider_order["id"]
             ).first()
             if local_po and local_po.status == PurchaseOrderStatus.OPEN:
-                # Receive the materials
                 receive_purchase_order(session, local_po.product_id, local_po.quantity)
                 local_po.status = PurchaseOrderStatus.RECEIVED
                 log_event(
@@ -406,9 +400,10 @@ async def advance_day(session: Session) -> Dict[str, Any]:
                     },
                 )
     except Exception as exc:
-        logger.warning(f"Failed to advance provider or check deliveries: {exc}")
+        logger.warning(f"Failed to check provider deliveries: {exc}")
 
     snapshot_metrics(session, today)
+    state.current_day = today  # commit the day bump AFTER snapshot.
 
     session.commit()
     return {"status": "advanced", "current_day": today}
@@ -557,10 +552,16 @@ async def create_purchase_order(
 ) -> PurchaseOrderRead:
     """Issue a purchase order for raw materials by calling the provider."""
     provider_service = get_provider_service(settings)
-    
-    # Place order with provider
+
+    # Resolve local product name; the provider has independent IDs.
+    product = session.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise ValueError(f"Unknown product_id {product_id}")
+
     try:
-        provider_order = await provider_service.place_order(product_id, quantity)
+        provider_order = await provider_service.place_order(
+            product_name=product.name, quantity=quantity,
+        )
     except Exception as exc:
         raise ValueError(f"Failed to place order with provider: {exc}")
 

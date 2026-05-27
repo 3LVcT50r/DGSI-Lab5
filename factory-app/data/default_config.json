@@ -36,7 +36,33 @@
       },
       "demand_mean": 3,
       "demand_variance": 1.5
+    },
+    "P3D-Mini": {
+      "assembly_time_hours": 3,
+      "wholesale_price": 180.0,
+      "bom": {
+        "kit_piezas": 1,
+        "pcb": 1,
+        "extrusor": 1,
+        "cables_conexion": 2,
+        "transformador_24v": 1,
+        "enchufe_schuko": 1
+      },
+      "demand_mean": 4,
+      "demand_variance": 2.0
     }
+  },
+  "initial_inventory": {
+    "kit_piezas": 60,
+    "pcb": 60,
+    "extrusor": 60,
+    "sensor_autonivel": 40,
+    "cables_conexion": 200,
+    "transformador_24v": 60,
+    "enchufe_schuko": 100,
+    "P3D-Classic": 5,
+    "P3D-Pro": 5,
+    "P3D-Mini": 5
   },
   "manufacturer": {
             "port": 8002,

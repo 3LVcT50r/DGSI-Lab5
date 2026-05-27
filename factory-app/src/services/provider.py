@@ -19,10 +19,23 @@ class ProviderService:
         response.raise_for_status()
         return response.json()
 
-    async def place_order(self, product_id: int, quantity: float) -> Dict[str, Any]:
-        """Place an order with the provider."""
+    async def place_order(
+        self,
+        product_id: int = None,
+        quantity: float = 0,
+        product_name: str = None,
+    ) -> Dict[str, Any]:
+        """Place an order with the provider, by name (preferred) or id.
+
+        Factory and provider have independent product IDs, so callers that
+        cross the boundary should pass `product_name`.
+        """
         url = f"{self.base_url}/api/v1/orders"
-        data = {"product_id": product_id, "quantity": quantity}
+        data: Dict[str, Any] = {"quantity": quantity}
+        if product_name is not None:
+            data["product_name"] = product_name
+        else:
+            data["product_id"] = product_id
         response = await self.client.post(url, json=data)
         response.raise_for_status()
         return response.json()

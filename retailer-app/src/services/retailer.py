@@ -84,8 +84,15 @@ def find_product(session: Session, product_id: Optional[int], product_name: Opti
 
 
 def get_current_day(session: Session) -> int:
+    """Return the day currently in progress.
+
+    `sim_state.current_day` stores the last *completed* day, so the day
+    being executed right now is stored + 1. This way order creation,
+    fulfillment, and backorder events that happen before `advance_day` runs
+    get tagged with the day the turn engine considers them part of.
+    """
     sim_state = session.query(SimState).first()
-    return sim_state.current_day if sim_state else 0
+    return (sim_state.current_day + 1) if sim_state else 1
 
 
 def create_customer_order(session: Session, order_data: CustomerOrderCreate) -> CustomerOrderRead:
@@ -386,11 +393,11 @@ def advance_day(session: Session, settings: Settings) -> int:
     if not sim_state:
         sim_state = SimState(current_day=0)
         session.add(sim_state)
+    # The day we are closing out (day in progress = last completed + 1).
     current_day = sim_state.current_day + 1
-    sim_state.current_day = current_day
 
-    # Generate new customer demand
-    generate_customer_demand(session, current_day, settings)
+    # Customer demand is injected by the turn engine. Internal generation
+    # would double-count it.
 
     poll_manufacturer_shipments(session, settings)
     auto_fulfill_backorders(session)
@@ -404,6 +411,7 @@ def advance_day(session: Session, settings: Settings) -> int:
     session.add(event)
 
     snapshot_metrics(session, current_day)
+    sim_state.current_day = current_day  # mark day complete AFTER snapshot.
 
     session.commit()
     return current_day
