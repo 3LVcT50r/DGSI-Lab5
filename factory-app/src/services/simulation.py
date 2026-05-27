@@ -193,6 +193,15 @@ async def advance_day(session: Session) -> Dict[str, Any]:
             {"order_id": mo.id, "sales_order_id": mo.sales_order_id, "qty": mo.quantity},
         )
 
+    # Discard delivered orders
+    sales_to_discard = session.query(SalesOrder).filter(
+        SalesOrder.status.in_( [
+            SalesOrderStatus.DELIVERED,
+        ])
+    ).order_by(SalesOrder.created_date.asc()).with_for_update().all()
+    
+    for so in sales_to_discard:
+        session.delete(so)
     # 3.5 Fulfil sales orders from finished stock
     from src.models.inventory import Inventory
     sales_to_fulfil = session.query(SalesOrder).filter(

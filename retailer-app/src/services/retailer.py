@@ -244,7 +244,7 @@ def create_purchase_order(session: Session, settings: Settings, purchase_data: P
 
 
 def get_manufacturer_order_status(settings: Settings, manufacturer_order_id: int) -> Optional[str]:
-    url = settings.manufacturer_url.rstrip("/") + f"/api/v1/orders/{manufacturer_order_id}"
+    url = settings.manufacturer_url.rstrip("/") + f"/api/v1/sales-orders/{manufacturer_order_id}"
     try:
         with httpx.Client(timeout=10.0) as client:
             response = client.get(url)
@@ -294,6 +294,7 @@ def poll_manufacturer_shipments(session: Session, settings: Settings) -> None:
                 ),
             )
             session.add(event)
+            
 
 
 def auto_fulfill_backorders(session: Session) -> None:
