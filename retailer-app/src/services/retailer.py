@@ -21,6 +21,8 @@ from src.models import (
     Sale,
     Event,
     SimState,
+    SignalState,
+    Metric,
 )
 from src.schemas.request import CustomerOrderCreate, PurchaseCreate, PriceUpdate
 from src.schemas.response import (
@@ -400,8 +402,133 @@ def advance_day(session: Session, settings: Settings) -> int:
         detail=f"Advanced to day {current_day}",
     )
     session.add(event)
+
+    snapshot_metrics(session, current_day)
+
     session.commit()
     return current_day
+
+
+def update_signal(
+    session: Session,
+    sim_day: int,
+    demand_modifier: float = 1.0,
+    supply_modifier: float = 1.0,
+    lead_time_modifier: float = 1.0,
+    price_sensitivity: Optional[str] = None,
+) -> SignalState:
+    """Persist today's market signal so it shows up in metrics and prompts."""
+    signal = session.query(SignalState).first()
+    if signal is None:
+        signal = SignalState()
+        session.add(signal)
+        session.flush()
+    signal.sim_day = sim_day
+    signal.demand_modifier = demand_modifier
+    signal.supply_modifier = supply_modifier
+    signal.lead_time_modifier = lead_time_modifier
+    signal.price_sensitivity = price_sensitivity
+    session.commit()
+    return signal
+
+
+def snapshot_metrics(session: Session, sim_day: int) -> None:
+    """Persist one Metric row per product with end-of-day state.
+
+    Counts are derived from the event log / order columns so they reflect
+    what actually happened during this specific day, not cumulative totals.
+    """
+    backordered_event_rows = (
+        session.query(Event.entity_id)
+        .filter(
+            Event.sim_day == sim_day,
+            Event.event_type == "customer_order_backordered",
+            Event.entity_type == "customer_order",
+        )
+        .all()
+    )
+    backordered_ids = {row[0] for row in backordered_event_rows if row[0] is not None}
+
+    products = session.query(Product).all()
+    for product in products:
+        stock = session.query(Stock).filter(Stock.product_id == product.id).first()
+        placed_today = (
+            session.query(CustomerOrder)
+            .filter(
+                CustomerOrder.product_id == product.id,
+                CustomerOrder.created_day == sim_day,
+            )
+            .count()
+        )
+        fulfilled_today = (
+            session.query(CustomerOrder)
+            .filter(
+                CustomerOrder.product_id == product.id,
+                CustomerOrder.fulfilled_day == sim_day,
+            )
+            .count()
+        )
+        if backordered_ids:
+            backordered_today = (
+                session.query(CustomerOrder)
+                .filter(
+                    CustomerOrder.product_id == product.id,
+                    CustomerOrder.id.in_(backordered_ids),
+                )
+                .count()
+            )
+        else:
+            backordered_today = 0
+
+        session.add(
+            Metric(
+                sim_day=sim_day,
+                product_id=product.id,
+                product_name=product.name,
+                printer_stock=stock.quantity_available if stock else 0.0,
+                retail_price=product.retail_price,
+                orders_placed_today=placed_today,
+                orders_fulfilled_today=fulfilled_today,
+                orders_backordered_today=backordered_today,
+            )
+        )
+
+
+def get_day_summary(session: Session, sim_day: int) -> dict:
+    """Aggregate today's customer-order outcome for the engine's one-line log."""
+    placed = (
+        session.query(CustomerOrder)
+        .filter(CustomerOrder.created_day == sim_day)
+        .count()
+    )
+    fulfilled = (
+        session.query(CustomerOrder)
+        .filter(CustomerOrder.fulfilled_day == sim_day)
+        .count()
+    )
+    backordered = (
+        session.query(Event)
+        .filter(
+            Event.sim_day == sim_day,
+            Event.event_type == "customer_order_backordered",
+        )
+        .count()
+    )
+    stockouts = (
+        session.query(CustomerOrder)
+        .filter(
+            CustomerOrder.created_day == sim_day,
+            CustomerOrder.status == CustomerOrderStatus.BACKORDERED,
+        )
+        .count()
+    )
+    return {
+        "sim_day": sim_day,
+        "placed": placed,
+        "fulfilled": fulfilled,
+        "backordered": backordered,
+        "stockouts": stockouts,
+    }
 
 
 def export_state(session: Session) -> str:

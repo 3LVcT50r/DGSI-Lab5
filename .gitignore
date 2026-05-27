@@ -12,5 +12,7 @@ __pycache__/*
 .pytest_cache
 *.log
 logs/
+runs/
+reports/
 **/data/*_metrics.csv
 .mypy_cache/

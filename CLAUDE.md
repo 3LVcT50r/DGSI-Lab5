@@ -159,7 +159,7 @@ under `skills/` and are referenced from `config/sim.json`.
   for charting (used by `analyze_sim.py`).
 - Every app's `events` table — full audit trail, queryable with SQL.
 
-## Current State (Week 8 in progress)
+## Current State (Week 8 plumbing complete; runs + report pending)
 
 | Area | Status | Notes |
 |------|--------|-------|
@@ -167,8 +167,51 @@ under `skills/` and are referenced from `config/sim.json`.
 | REST contracts across apps | ✅ | Manufacturer ↔ Provider, Retailer ↔ Manufacturer |
 | `turn_engine.py` orchestrator | ✅ | claude --print with mock fallback |
 | Three skill files | ✅ | manufacturer / provider / retail managers |
-| Scenarios: calm + volatile | ✅ | `calm-market.json`, `holiday-rush.json` |
+| Scenarios: calm + volatile + smoke | ✅ | `calm-market.json`, `holiday-rush.json`, `smoke-test.json` |
 | Per-day agent logs | ✅ | `logs/day-NNN-role.log` |
-| Per-app metrics CSV | ✅ | Snapshot per turn |
-| 15+ day simulation run | ⏳ | Pending Week 8 execution |
-| Charts and report | ⏳ | Pending Week 8 deliverable |
+| Per-app `metrics` table (server-side snapshot) | ✅ | Written by each `advance_day` |
+| `/api/v1/signal` endpoint per app | ✅ | Engine pushes today's modifiers before agents act |
+| `lead_time_modifier` wired into provider | ✅ | `place_order` inflates `expected_delivery_day` |
+| Engine one-line per-day summary | ✅ | `Day N: X placed / Y fulfilled / Z backordered / W stockouts` |
+| `--run-tag` archives DBs to `runs/<tag>/` | ✅ | Survives the next scenario run |
+| 4 required charts via `analyze_sim.py` | ✅ | Inventory · prices · fulfillment · events strip |
+| Side-by-side `compare_scenarios.py` | ✅ | Calm vs volatile |
+| 15+ day simulation run | ⏳ | Run on Linux box |
+| Final report (PDF) and slides | ⏳ | Template in `docs/report.md` |
+
+## Week 8 plumbing notes (what changed under the hood)
+
+- New models in each app: `SignalState` (today's modifiers) and `Metric`
+  (per-day per-product snapshot). Both created via
+  `Base.metadata.create_all`; if you have pre-Week-8 SQLite files, delete
+  them so the schemas recreate.
+- The provider's `place_order` now applies `lead_time_modifier`. A
+  `chip_shortage` event with `lead_time_modifier=2.0` therefore doubles
+  the effective lead time on orders placed during the shortage.
+- `mock_agent.py` no longer writes CSVs (or shells out to a bash CLI
+  wrapper). All metrics now come from each app's `metrics` table.
+
+## Known plumbing issues NOT fixed in Week 8 (deliberately deferred)
+
+These were identified during smoke-testing and left for a Linux follow-up
+because the priority was Week 8 deliverables:
+
+1. `retailer.advance_day` calls `generate_customer_demand` internally even
+   though `turn_engine.generate_customer_orders` already injects demand →
+   double-generation. Workaround: comment out the internal call.
+2. `factory.simulation.advance_day` calls `provider_service.advance_day()`
+   itself, so the provider advances twice per turn (once by the factory,
+   once by the engine).
+3. `factory.simulation.advance_day` auto-generates internal manufacturing
+   orders via `generate_demand` — Lab 5 residue, should be off now that
+   the retailer is the source of truth.
+4. `uvicorn --reload=True` is hard-coded in the apps; two processes
+   sharing the same SQLite file produce `database is locked` errors under
+   load. Workaround: remove `reload=True`.
+5. `seed-retailer.json` lists `P3D-Mini` but `factory-app` only knows
+   `P3D-Classic` and `P3D-Pro`; manufacturer 404s on Mini purchase orders.
+6. Manufacturer raw-material inventory seeded to 0, so the first few days
+   block on `waiting_for_materials`. Consider seeding initial parts stock.
+
+The `runs/<tag>/` archives produced by the engine will contain reasonable
+data once these are fixed; the metrics plumbing itself is correct.

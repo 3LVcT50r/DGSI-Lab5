@@ -2,15 +2,63 @@
 
 import json
 import logging
+import math
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from src.models import Product, PricingTier, Stock, Order, OrderStatus, Event, SimState
+from src.models import (
+    Product,
+    PricingTier,
+    Stock,
+    Order,
+    OrderStatus,
+    Event,
+    SimState,
+    SignalState,
+    Metric,
+)
 from src.schemas.request import OrderCreate
 from src.schemas.response import CatalogItemRead, StockRead, OrderRead
 from src.services.seed import seed_database_from_config
 
 logger = logging.getLogger(__name__)
+
+
+def get_signal_state(session: Session) -> SignalState:
+    """Return the current signal state, creating the singleton if absent."""
+    signal = session.query(SignalState).first()
+    if signal is None:
+        signal = SignalState()
+        session.add(signal)
+        session.flush()
+    return signal
+
+
+def update_signal(
+    session: Session,
+    sim_day: int,
+    demand_modifier: float = 1.0,
+    supply_modifier: float = 1.0,
+    lead_time_modifier: float = 1.0,
+) -> SignalState:
+    """Store today's market signal so future day-advances apply it."""
+    signal = get_signal_state(session)
+    signal.sim_day = sim_day
+    signal.demand_modifier = demand_modifier
+    signal.supply_modifier = supply_modifier
+    signal.lead_time_modifier = lead_time_modifier
+    session.commit()
+    return signal
+
+
+def _effective_lead_time(base_lead_time: int, lead_time_modifier: float) -> int:
+    """Stretch a product's lead time by today's modifier.
+
+    Rounded up. Floor of 1 day enforces the PDF's ironclad rule: an order
+    placed today cannot arrive today, regardless of any modifier below 1.0.
+    """
+    effective = math.ceil(base_lead_time * max(lead_time_modifier, 0.0))
+    return max(effective, 1)
 
 
 def get_catalog(session: Session) -> List[CatalogItemRead]:
@@ -93,12 +141,17 @@ def place_order(session: Session, order_data: OrderCreate) -> OrderRead:
     # Calculate price
     total_price = calculate_price(session, product_id, order_data.quantity)
 
+    # Apply today's lead_time_modifier (e.g. chip shortage stretches lead times)
+    signal = session.query(SignalState).first()
+    lead_time_modifier = signal.lead_time_modifier if signal else 1.0
+    effective_lead_time = _effective_lead_time(product.lead_time_days, lead_time_modifier)
+
     # Create order
     order = Order(
         product_id=product_id,
         quantity=order_data.quantity,
         status=OrderStatus.PENDING,
-        expected_delivery_day=current_day + product.lead_time_days,
+        expected_delivery_day=current_day + effective_lead_time,
         total_price=total_price
     )
     session.add(order)
@@ -227,8 +280,53 @@ def advance_day(session: Session) -> int:
     )
     session.add(event)
 
+    snapshot_metrics(session, current_day)
+
     session.commit()
     return current_day
+
+
+def snapshot_metrics(session: Session, sim_day: int) -> None:
+    """Persist one Metric row per product capturing the end-of-day state.
+
+    Read by `analyze_sim.py` to build the inventory and price charts. Day-level
+    aggregates (`orders_pending`, shipped/delivered counts) repeat across rows
+    of the same day so the analyzer can group by sim_day and pick any row.
+    """
+    pending = session.query(Order).filter(Order.status == OrderStatus.PENDING).count()
+    shipped_today = (
+        session.query(Event)
+        .filter(Event.sim_day == sim_day, Event.event_type == "order_shipped")
+        .count()
+    )
+    delivered_today = (
+        session.query(Event)
+        .filter(Event.sim_day == sim_day, Event.event_type == "order_delivered")
+        .count()
+    )
+
+    products = session.query(Product).all()
+    for product in products:
+        stock = session.query(Stock).filter(Stock.product_id == product.id).first()
+        # Representative price: cheapest tier (typical bulk price); falls back to None.
+        cheapest = (
+            session.query(PricingTier)
+            .filter(PricingTier.product_id == product.id)
+            .order_by(PricingTier.min_quantity.desc())
+            .first()
+        )
+        session.add(
+            Metric(
+                sim_day=sim_day,
+                product_id=product.id,
+                product_name=product.name,
+                stock_qty=stock.quantity if stock else 0.0,
+                top_tier_price=cheapest.price if cheapest else None,
+                orders_pending=pending,
+                orders_shipped_today=shipped_today,
+                orders_delivered_today=delivered_today,
+            )
+        )
 
 
 def get_current_day(session: Session) -> int:

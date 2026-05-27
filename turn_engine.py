@@ -27,7 +27,17 @@ import httpx
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 LOGS_DIR = PROJECT_ROOT / "logs"
+RUNS_DIR = PROJECT_ROOT / "runs"
 AGENT_TIMEOUT_S = 180
+
+# Source-of-truth filenames each app writes its SQLite DB to. Kept here so the
+# --run-tag archive step can copy them without each tool having to know the
+# layout.
+APP_DB_FILES = {
+    "provider": PROJECT_ROOT / "provider-app" / "data" / "provider.sqlite",
+    "factory": PROJECT_ROOT / "factory-app" / "data" / "database.sqlite",
+    "retailer": PROJECT_ROOT / "retailer-app" / "data" / "retailer.sqlite",
+}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -186,6 +196,41 @@ ADVANCE_ENDPOINTS = {
 }
 
 
+def broadcast_signal(config: Dict[str, Any], signal: Dict[str, Any]) -> None:
+    """POST today's signal to every app's `/api/v1/signal` endpoint.
+
+    Done BEFORE agents run so a chip-shortage's `lead_time_modifier` is in
+    effect when the manufacturer agent places orders with the provider.
+    Apps that don't act on a given modifier still store it for observability.
+    """
+    base_payload: Dict[str, Any] = {
+        "sim_day": signal["day"],
+        "demand_modifier": signal.get("demand_modifier", 1.0),
+        "supply_modifier": signal.get("supply_modifier", 1.0),
+        "lead_time_modifier": signal.get("lead_time_modifier", 1.0),
+    }
+    retailer_payload = dict(base_payload)
+    if "price_sensitivity" in signal:
+        retailer_payload["price_sensitivity"] = signal["price_sensitivity"]
+
+    targets: List[tuple[str, Dict[str, Any]]] = []
+    for r in config.get("retailers", []):
+        targets.append((r["url"], retailer_payload))
+    manuf = config.get("manufacturer")
+    if manuf:
+        targets.append((manuf["url"], base_payload))
+    for p in config.get("providers", []):
+        targets.append((p["url"], base_payload))
+
+    for url, payload in targets:
+        try:
+            resp = httpx.post(f"{url}/api/v1/signal", json=payload, timeout=10.0)
+            if resp.status_code >= 400:
+                logger.warning("signal POST %s failed: %s %s", url, resp.status_code, resp.text)
+        except Exception as exc:
+            logger.warning("signal POST %s failed: %s", url, exc)
+
+
 def advance_all(config: Dict[str, Any]) -> None:
     """Advance every app's simulated day in retailer → manufacturer → provider order."""
     targets: List[tuple[str, str]] = []
@@ -206,6 +251,37 @@ def advance_all(config: Dict[str, Any]) -> None:
             logger.warning("advance %s failed: %s", url, exc)
 
 
+def log_day_summary(config: Dict[str, Any], day: int) -> None:
+    """Print the one-line per-day summary the PDF requires.
+
+    Aggregates outcomes across every configured retailer.
+    """
+    placed = fulfilled = backordered = stockouts = 0
+    for retailer in config.get("retailers", []):
+        url = retailer["url"].rstrip("/")
+        try:
+            resp = httpx.get(f"{url}/api/v1/day/summary?day={day}", timeout=10.0)
+            if resp.status_code >= 400:
+                logger.warning("summary fetch %s failed: %s", url, resp.status_code)
+                continue
+            data = resp.json()
+            placed += data.get("placed", 0)
+            fulfilled += data.get("fulfilled", 0)
+            backordered += data.get("backordered", 0)
+            stockouts += data.get("stockouts", 0)
+        except Exception as exc:
+            logger.warning("summary fetch %s failed: %s", url, exc)
+
+    logger.info(
+        "Day %s: %s placed / %s fulfilled / %s backordered / %s stockouts",
+        day,
+        placed,
+        fulfilled,
+        backordered,
+        stockouts,
+    )
+
+
 def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
     signal = todays_signal(day, scenario)
     logger.info("=" * 60)
@@ -215,6 +291,10 @@ def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
                 signal["supply_modifier"],
                 [e.get("name") for e in signal["events"]] or "none")
     logger.info("=" * 60)
+
+    # Push today's signal to every app BEFORE agents act, so e.g. a chip-shortage
+    # lead_time_modifier is in effect when the manufacturer places orders.
+    broadcast_signal(config, signal)
 
     for retailer in config.get("retailers", []):
         n = generate_customer_orders(retailer, signal)
@@ -251,16 +331,56 @@ def run_day(day: int, config: Dict[str, Any], scenario: Dict[str, Any]) -> None:
         )
 
     advance_all(config)
+    log_day_summary(config, day)
+
+
+def archive_dbs(run_tag: str) -> Path:
+    """Copy each app's live SQLite file into `runs/<run_tag>/`.
+
+    Used after a run completes so `analyze_sim.py --db-dir runs/<tag>` and
+    `compare_scenarios.py` can read it without colliding with the next run.
+    """
+    dest = RUNS_DIR / run_tag
+    dest.mkdir(parents=True, exist_ok=True)
+    for name, src in APP_DB_FILES.items():
+        if not src.exists():
+            logger.warning("archive: %s DB missing at %s", name, src)
+            continue
+        shutil.copy2(src, dest / src.name)
+    logger.info("archived run DBs to %s", dest)
+    return dest
+
+
+def _pop_arg(args: List[str], name: str) -> Optional[str]:
+    if name in args:
+        idx = args.index(name)
+        if idx + 1 >= len(args):
+            raise SystemExit(f"{name} requires a value")
+        value = args[idx + 1]
+        del args[idx:idx + 2]
+        return value
+    return None
 
 
 def main() -> None:
-    if len(sys.argv) < 4:
-        print("Usage: python turn_engine.py <config.json> <scenario.json> <num_days> [--seed N]")
+    args = sys.argv[1:]
+    if len(args) < 3:
+        print(
+            "Usage: python turn_engine.py <config.json> <scenario.json> <num_days> "
+            "[--seed N] [--run-tag NAME]"
+        )
         sys.exit(1)
 
-    config_path, scenario_path, num_days = sys.argv[1], sys.argv[2], int(sys.argv[3])
-    if "--seed" in sys.argv:
-        random.seed(int(sys.argv[sys.argv.index("--seed") + 1]))
+    seed = _pop_arg(args, "--seed")
+    run_tag = _pop_arg(args, "--run-tag")
+
+    if len(args) < 3:
+        print("missing positional arguments after option parsing", file=sys.stderr)
+        sys.exit(1)
+
+    config_path, scenario_path, num_days = args[0], args[1], int(args[2])
+    if seed is not None:
+        random.seed(int(seed))
 
     config = load_config(config_path)
     scenario = load_scenario(scenario_path)
@@ -268,6 +388,9 @@ def main() -> None:
     LOGS_DIR.mkdir(exist_ok=True)
     for day in range(1, num_days + 1):
         run_day(day, config, scenario)
+
+    if run_tag:
+        archive_dbs(run_tag)
 
 
 if __name__ == "__main__":

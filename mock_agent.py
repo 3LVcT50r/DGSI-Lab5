@@ -11,17 +11,16 @@ The role argument can be one of:
 
 It uses the app's REST API to reproduce a sensible-but-dumb daily turn so the
 simulation has something to chew on while the LLM agent is offline.
-Metric CSVs are written under <app>/data/<role>_metrics.csv.
+
+Metrics are no longer written here — each app snapshots them server-side in
+its own `advance_day` (see `snapshot_metrics` in the services modules).
 """
 
 from __future__ import annotations
 
-import csv
 import json
 import logging
-import os
 import sys
-from pathlib import Path
 from typing import Any, Dict
 
 import httpx
@@ -30,123 +29,83 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [mock %(levelname)s]
 logger = logging.getLogger("mock_agent")
 
 
-def _metrics_path(filename: str) -> Path:
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-    return data_dir / filename
-
-
-def _append_csv(path: Path, header: list[str], row: list[Any]) -> None:
-    new_file = not path.exists() or path.stat().st_size == 0
-    with path.open("a", newline="") as fh:
-        writer = csv.writer(fh)
-        if new_file:
-            writer.writerow(header)
-        writer.writerow(row)
-
-
 def run_provider(context: Dict[str, Any], url: str) -> None:
-    day = context.get("day", 0)
-    cli_wrapper = Path("..") / "provider-cli"
-    try:
-        stock = httpx.get(f"{url}/api/v1/stock", timeout=10.0).json()
-        for item in stock:
-            qty = item.get("quantity", 0)
-            if qty < 100 and cli_wrapper.exists():
-                product_id = item.get("product_id")
-                import subprocess
-                subprocess.run(
-                    ["bash", str(cli_wrapper), "restock", str(product_id), "200"],
-                    check=False, timeout=30,
-                )
-                logger.info("restocked product %s with 200 units (via CLI)", product_id)
-    except Exception as exc:
-        logger.warning("provider restock skipped: %s", exc)
+    """Restock any product below a hard floor via the REST API.
 
+    The previous version invoked the bash CLI wrapper, which broke under
+    Windows venvs because the wrapper hard-codes `venv/bin/python`. Using
+    the API keeps this cross-platform and side-steps that whole class of
+    issue.
+    """
     try:
         stock = httpx.get(f"{url}/api/v1/stock", timeout=10.0).json()
-        orders = httpx.get(f"{url}/api/v1/orders", timeout=10.0).json()
-        total_stock = sum(s.get("quantity", 0) for s in stock)
-        pending = sum(1 for o in orders if o.get("status") == "pending")
-        _append_csv(
-            _metrics_path("provider_metrics.csv"),
-            ["day", "stock_qty", "pending_orders"],
-            [day, total_stock, pending],
-        )
     except Exception as exc:
-        logger.warning("provider metrics skipped: %s", exc)
+        logger.warning("provider stock fetch failed: %s", exc)
+        return
+
+    for item in stock:
+        qty = item.get("quantity", 0)
+        product_id = item.get("product_id")
+        if qty < 100 and product_id is not None:
+            try:
+                httpx.post(
+                    f"{url}/api/v1/orders",
+                    json={"product_id": product_id, "quantity": 200, "buyer": "self-restock"},
+                    timeout=10.0,
+                )
+                logger.info("provider %s requested self-restock for product %s", url, product_id)
+            except Exception as exc:
+                logger.warning("provider self-restock failed for %s: %s", product_id, exc)
 
 
 def run_manufacturer(context: Dict[str, Any], url: str) -> None:
-    day = context.get("day", 0)
+    """Release every pending sales order. Dumb but useful for plumbing tests."""
     try:
         sales = httpx.get(f"{url}/api/v1/sales-orders", timeout=10.0).json()
-        for order in sales:
-            if order.get("status") == "pending":
-                httpx.post(f"{url}/api/v1/sales-orders/{order['id']}/release", timeout=10.0)
     except Exception as exc:
-        logger.warning("manufacturer release skipped: %s", exc)
+        logger.warning("manufacturer sales fetch failed: %s", exc)
+        return
 
-    try:
-        inv = httpx.get(f"{url}/api/v1/inventory", timeout=10.0).json()
-        sales = httpx.get(f"{url}/api/v1/sales-orders", timeout=10.0).json()
-        parts = sum(
-            s.get("quantity", 0)
-            for s in inv
-            if s.get("product_type", "raw_material") == "raw_material"
-        )
-        printers = sum(
-            s.get("quantity", 0)
-            for s in inv
-            if s.get("product_type") == "finished_good"
-        )
-        pending = sum(1 for o in sales if o.get("status") == "pending")
-        _append_csv(
-            _metrics_path("manufacturer_metrics.csv"),
-            ["day", "parts_stock", "printer_stock", "pending_orders"],
-            [day, parts, printers, pending],
-        )
-    except Exception as exc:
-        logger.warning("manufacturer metrics skipped: %s", exc)
+    for order in sales:
+        if order.get("status") in ("received", "pending"):
+            try:
+                httpx.post(f"{url}/api/v1/sales-orders/{order['id']}/release", timeout=10.0)
+            except Exception as exc:
+                logger.warning("release sales order %s failed: %s", order.get("id"), exc)
 
 
 def run_retailer(context: Dict[str, Any], url: str) -> None:
-    day = context.get("day", 0)
+    """Fulfill what is fulfillable, backorder the rest, and order a token batch."""
     try:
         orders = httpx.get(f"{url}/api/v1/orders", timeout=10.0).json()
-        for order in orders:
-            if order.get("status") == "pending":
-                try:
-                    httpx.post(f"{url}/api/v1/orders/{order['id']}/fulfill", timeout=10.0)
-                except Exception:
-                    httpx.post(f"{url}/api/v1/orders/{order['id']}/backorder", timeout=10.0)
     except Exception as exc:
-        logger.warning("retailer fulfill skipped: %s", exc)
+        logger.warning("retailer orders fetch failed: %s", exc)
+        return
+
+    for order in orders:
+        if order.get("status") != "created":
+            continue
+        try:
+            httpx.post(f"{url}/api/v1/orders/{order['id']}/fulfill", timeout=10.0)
+        except Exception:
+            try:
+                httpx.post(f"{url}/api/v1/orders/{order['id']}/backorder", timeout=10.0)
+            except Exception as exc:
+                logger.warning("retailer backorder %s failed: %s", order.get("id"), exc)
 
     try:
         catalog = httpx.get(f"{url}/api/v1/catalog", timeout=10.0).json()
-        for item in catalog:
-            payload = {"product_name": item["name"], "quantity": 5}
-            try:
-                httpx.post(f"{url}/api/v1/purchases", json=payload, timeout=10.0)
-            except Exception:
-                pass
     except Exception as exc:
-        logger.warning("retailer reorder skipped: %s", exc)
+        logger.warning("retailer catalog fetch failed: %s", exc)
+        return
 
-    try:
-        stock = httpx.get(f"{url}/api/v1/stock", timeout=10.0).json()
-        orders = httpx.get(f"{url}/api/v1/orders", timeout=10.0).json()
-        total_stock = sum(s.get("quantity_available", s.get("quantity", 0)) for s in stock)
-        fulfilled = sum(1 for o in orders if o.get("status") == "fulfilled")
-        backordered = sum(1 for o in orders if o.get("status") == "backordered")
-        _append_csv(
-            _metrics_path("retailer_metrics.csv"),
-            ["day", "printer_stock", "fulfilled_orders", "backordered"],
-            [day, total_stock, fulfilled, backordered],
-        )
-    except Exception as exc:
-        logger.warning("retailer metrics skipped: %s", exc)
+    for item in catalog:
+        payload = {"product_name": item["name"], "quantity": 5}
+        try:
+            httpx.post(f"{url}/api/v1/purchases", json=payload, timeout=10.0)
+        except Exception:
+            # The manufacturer may not stock this model; keep going for the others.
+            pass
 
 
 def main() -> None:

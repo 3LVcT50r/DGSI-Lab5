@@ -28,6 +28,9 @@ from src.models import (
     ProductType,
     Event,
     EventType,
+    SignalState,
+    Metric,
+    Inventory,
 )
 from src.schemas import (
     SimulationStatus,
@@ -53,6 +56,82 @@ def log_event(
     """Helper to write to the event log."""
     evt = Event(type=event_type, sim_date=sim_date, details=details)
     session.add(evt)
+
+
+def update_signal(
+    session: Session,
+    sim_day: int,
+    demand_modifier: float = 1.0,
+    supply_modifier: float = 1.0,
+    lead_time_modifier: float = 1.0,
+) -> SignalState:
+    """Persist today's market signal so it shows up in metrics and prompts."""
+    signal = session.query(SignalState).first()
+    if signal is None:
+        signal = SignalState()
+        session.add(signal)
+        session.flush()
+    signal.sim_day = sim_day
+    signal.demand_modifier = demand_modifier
+    signal.supply_modifier = supply_modifier
+    signal.lead_time_modifier = lead_time_modifier
+    session.commit()
+    return signal
+
+
+def snapshot_metrics(session: Session, sim_day: int) -> None:
+    """Persist one Metric row per product at the end of `advance_day`.
+
+    Day-level aggregates (`sales_orders_pending`, completed today, capacity
+    utilisation) are duplicated across rows of the same day so the analyzer
+    can pick any row without joining.
+    """
+    sales_pending = (
+        session.query(SalesOrder)
+        .filter(
+            SalesOrder.status.in_(
+                [
+                    SalesOrderStatus.RECEIVED,
+                    SalesOrderStatus.RELEASED,
+                    SalesOrderStatus.IN_PROGRESS,
+                    SalesOrderStatus.COMPLETED,
+                ]
+            )
+        )
+        .count()
+    )
+    sales_completed_today = (
+        session.query(SalesOrder)
+        .filter(SalesOrder.delivered_date == sim_day)
+        .count()
+    )
+
+    capacity = get_capacity_status(session)
+    cap_per_day = max(int(capacity.get("capacity_per_day", 0)), 1)
+    utilisation = round(
+        capacity.get("current_utilisation", 0) / cap_per_day * 100.0, 2
+    )
+
+    products = session.query(Product).all()
+    for product in products:
+        inv = (
+            session.query(Inventory)
+            .filter(Inventory.product_id == product.id)
+            .first()
+        )
+        session.add(
+            Metric(
+                sim_day=sim_day,
+                product_id=product.id,
+                product_name=product.name,
+                product_type=product.type.value if product.type else "raw",
+                stock_qty=inv.quantity if inv else 0.0,
+                wholesale_price=product.wholesale_price,
+                sales_orders_pending=sales_pending,
+                sales_orders_completed_today=sales_completed_today,
+                capacity_utilisation_pct=utilisation,
+            )
+        )
 
 
 def get_current_day(session: Session) -> int:
@@ -328,6 +407,8 @@ async def advance_day(session: Session) -> Dict[str, Any]:
                 )
     except Exception as exc:
         logger.warning(f"Failed to advance provider or check deliveries: {exc}")
+
+    snapshot_metrics(session, today)
 
     session.commit()
     return {"status": "advanced", "current_day": today}

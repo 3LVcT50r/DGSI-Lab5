@@ -6,6 +6,8 @@ from src.models.stock import Stock
 from src.models.sale import Sale
 from src.models.event import Event
 from src.models.sim_state import SimState
+from src.models.signal_state import SignalState
+from src.models.metric import Metric
 
 __all__ = [
     "Base",
@@ -18,4 +20,6 @@ __all__ = [
     "Sale",
     "Event",
     "SimState",
+    "SignalState",
+    "Metric",
 ]

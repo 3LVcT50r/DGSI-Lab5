@@ -6,6 +6,8 @@ from src.models.purchase_order import PurchaseOrder, PurchaseOrderStatus
 from src.models.supplier import Supplier
 from src.models.inventory import Inventory
 from src.models.event import Event, EventType
+from src.models.signal_state import SignalState
+from src.models.metric import Metric
 
 __all__ = [
     "Base",
@@ -23,4 +25,6 @@ __all__ = [
     "Inventory",
     "Event",
     "EventType",
+    "SignalState",
+    "Metric",
 ]

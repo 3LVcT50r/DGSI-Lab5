@@ -1,85 +1,182 @@
-# 🏭 Simulador Logístico: Fábrica de Impresoras 3D (DGSI-Lab5)
+# 3D Printer Supply Chain Simulator
 
-## 📖 ¿Qué es este proyecto?
+Multi-agent supply chain simulation across Weeks 5–8 of the DGSI course.
+Three independent FastAPI services (provider, manufacturer, retailer) share
+a simulated world over REST. A turn engine advances them day-by-day, injects
+market signals from scenario files, and invokes a Claude Code skill per role
+each day.
 
-Este proyecto es un simulador web de tipo "juego de gestión" basado en turnos diarios, donde tú tomas el control de una fábrica que ensambla y vende **impresoras 3D** (*P3D-Classic* y *P3D-Pro*). 
+> Deterministic plumbing hosts non-deterministic strategy: Python apps and a
+> turn engine handle execution; LLM agents (or a deterministic mock) drive
+> the daily decisions.
 
-Se trata de un sistema transaccional donde convergen varios flujos vitales de gestión empresarial:
-- **Flujo de Demanda:** Diariamente recibes aleatoriamente nuevos pedidos ("Manufacturing Orders") por parte de clientes según una curva normal parametrizada. 
-- **Cadena de Suministro (Supply Chain):** Tú no fabricas las piezas de las impresoras (PCB, motores, extrusores), se las tienes que comprar a proveedores externos. Debes jugar contando con sus tiempos logísticos de entrega (*Lead Times*).
-- **Control de Inventario y MRP:** Un motor logístico lee la lista de componentes (BOM - *Bill of Materials*), reserva las partes y frena tus pedidos a estado `waiting_for_materials` (esperando materiales) cuando sufres de escasez (Stockout).
-- **Capacidad de Fábrica:** Tienes la limitación realista de poder ensamblar, como máximo, 10 impresoras por día.
+See [docs/PRD.md](docs/PRD.md) for the full architecture and contract.
 
-El sistema completo usa una arquitectura **FastAPI** robusta para manejar la capa de servicios y **Streamlit** para que disfrutes de una interfaz moderna conectada mediante una API REST. Todo el backend funciona gracias a modelos transaccionales de **SQLAlchemy** respaldados por una base de datos local SQLite persistente.
+## Prerequisites
 
----
+- Python 3.11+
+- (Optional) [`claude` CLI](https://docs.claude.com/en/docs/claude-code/cli)
+  on `PATH` to drive agents with real LLM calls. Without it the engine falls
+  back to `mock_agent.py`.
 
-## 🛠️ Requisitos Previos
-
-- **Python 3.10 o superior** (Desarrollado y probado en entorno Python 3.12).
-- Tener instalado `pip` e idealmente un creador de entornos virtuales tipo `venv`.
-
----
-
-## 🚀 Instalación y Preparación
-
-Abre tu terminal en la carpeta principal del proyecto (donde estás leyendo este README) y ejecuta los siguientes comandos para encapsular todo e instalar las librerías:
+## Setup
 
 ```bash
-# 1. Crear entorno virtual
-python -m venv venv
+git clone https://github.com/3LVcT50r/DGSI-Lab5.git
+cd DGSI-Lab5
 
-# 2. Activar el entorno virtual
-# En Linux/macOS:
-source venv/bin/activate
-# En Windows (Powershell):
-# venv\Scripts\Activate.ps1
+# Create and activate a virtualenv (Linux / macOS)
+python3 -m venv .venv
+source .venv/bin/activate
 
-# 3. Instalar librerías
+# Windows PowerShell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
 pip install -r requirements.txt
 ```
 
-*(Nota: Al arrancarse el sistema por la primera vez, el backend auto-generará su base de datos `data/database.sqlite` y leerá `data/default_config.json` para pre-poblar los productos y proveedores).*
+## Run the three services
 
----
-
-## 🕹️ Cómo Ejecutar el Simulador
-
-El software ahora está diseñado como una arquitectura de microservicios distribuidos. Necesitas ejecutar cada componente de la cadena de suministro por separado para que puedan comunicarse a través de la red.
-
-### 1️⃣ Levantar los Microservicios
-
-Abre tres terminales independientes. En cada una, asegúrate de activar tu entorno virtual (`source venv/bin/activate`) e inicia el servicio correspondiente en su puerto asignado:
-
-**Terminal 1 (Provider / Proveedor de Piezas):**
-```bash
-./provider-cli serve --port 8001
-```
-
-**Terminal 2 (Manufacturer / Fábrica de Impresoras):**
-```bash
-./manufacturer-cli serve --port 8002
-```
-
-**Terminal 3 (Retailer / Tienda Minorista):**
-```bash
-./retailer-cli serve --port 8003
-```
-
-*(Opcional: Si lo deseas, puedes seguir usando la interfaz gráfica de la fábrica en otra terminal ejecutando `streamlit run factory-app/src/ui/app.py` en el puerto 8501).*
-
----
-
-## 🎮 El Turn Engine (Motor de Turnos)
-
-Una vez que los tres microservicios (Proveedor, Fabricante y Minorista) están funcionando en segundo plano, la simulación de la cadena de suministro se avanza de forma sincronizada mediante el **Turn Engine**.
-
-El Turn Engine es un script que inyecta la demanda de clientes en la tienda minorista y luego orquesta que cada microservicio tome sus decisiones diarias antes de avanzar todos al siguiente día.
-
-Para ejecutar una simulación de varios días (por ejemplo, 5 días), abre una cuarta terminal, activa tu entorno y ejecuta:
+Open three terminals (or use a multiplexer like `tmux`). Activate the venv
+in each.
 
 ```bash
-python turn_engine.py config/sim.json scenarios/smoke-test.json 5
+# Terminal 1
+cd provider-app && PYTHONPATH=. python -m src.cli serve --port 8001
+
+# Terminal 2
+cd factory-app && PYTHONPATH=. python -m src.cli serve --port 8002
+
+# Terminal 3
+cd retailer-app && PYTHONPATH=. python -m src.cli serve --port 8003
 ```
 
-En la salida de la consola verás cómo el Turn Engine avanza día a día: generará pedidos de usuarios finales, ejecutará el turno de cada agente involucrado, y hará avanzar las manecillas del tiempo en las bases de datos de todos los microservicios simultáneamente a través de sus APIs REST `v1`.
+Health check:
+
+```bash
+curl http://localhost:8001/api/v1/catalog
+curl http://localhost:8002/api/v1/inventory
+curl http://localhost:8003/api/v1/catalog
+```
+
+Each app also serves interactive Swagger UI at `http://localhost:<port>/docs`.
+
+## Run one full simulation
+
+From the project root (with all three services up):
+
+```bash
+# Calm 25-day baseline (control group)
+python turn_engine.py config/sim.json scenarios/calm-market.json 25 \
+    --seed 1 --run-tag calm
+
+# Reset the DBs between runs so the next scenario starts clean
+curl -X POST http://localhost:8001/api/v1/day/reset
+curl -X POST http://localhost:8002/api/v1/simulate/reset
+# (retailer has no reset endpoint yet — delete its .sqlite file and restart
+# the retailer process, or use POST /api/v1/state/import to reseed.)
+
+# Volatile 25-day run (Black Friday + chip shortage + Christmas)
+python turn_engine.py config/sim.json scenarios/holiday-rush.json 25 \
+    --seed 1 --run-tag holiday
+```
+
+`--run-tag NAME` archives the three SQLite DBs into `runs/<NAME>/` so they
+can be re-analysed later without colliding with the next run.
+
+Force the deterministic mock agent (no LLM cost, no `claude` CLI required):
+
+```bash
+# Linux / macOS
+FORCE_MOCK_AGENT=1 python turn_engine.py config/sim.json scenarios/smoke-test.json 3
+
+# Windows PowerShell
+$env:FORCE_MOCK_AGENT = "1"
+python turn_engine.py config\sim.json scenarios\smoke-test.json 3
+```
+
+## Analyse a run
+
+```bash
+# Charts for whichever run is currently in the live DBs
+python analyze_sim.py scenarios/holiday-rush.json --out reports/holiday-rush
+
+# Charts for an archived run
+python analyze_sim.py scenarios/holiday-rush.json \
+    --db-dir runs/holiday --out reports/holiday-rush
+```
+
+Writes four PNGs under `reports/holiday-rush/`:
+
+- `inventory_over_time.png` — three lines: parts @ manufacturer, finished
+  printers @ manufacturer, printers @ retailer; with shaded event bands.
+- `prices_over_time.png` — provider top-tier, manufacturer wholesale,
+  retailer retail; with shaded event bands.
+- `order_fulfillment.png` — per-day grouped bars: placed / fulfilled /
+  backordered.
+- `events_strip.png` — standalone scenario-events strip.
+
+## Compare two scenarios
+
+After running both with `--run-tag`:
+
+```bash
+python compare_scenarios.py \
+    --run-a runs/calm    --scenario-a scenarios/calm-market.json   --label-a "Calm" \
+    --run-b runs/holiday --scenario-b scenarios/holiday-rush.json  --label-b "Holiday" \
+    --out reports/calm-vs-holiday
+```
+
+Produces side-by-side `inventory_compare.png`, `prices_compare.png`,
+`fulfillment_compare.png`.
+
+## Project layout
+
+```
+DGSI-Lab5/
+├── provider-app/          # Parts provider (:8001)
+├── factory-app/           # Manufacturer (:8002)
+├── retailer-app/          # Retail store (:8003)
+├── skills/                # *.md — one skill per role
+├── scenarios/             # *.json — calm-market, holiday-rush, smoke-test
+├── config/sim.json        # Engine config: app URLs + skill paths
+├── logs/                  # day-NNN-role.log (gitignored)
+├── runs/                  # Archived SQLite snapshots, per --run-tag
+├── reports/               # Generated PNGs from analyze_sim / compare_scenarios
+├── docs/
+│   ├── PRD.md             # Full system requirements
+│   └── report.md          # Final 5–8 page Week 8 report
+├── turn_engine.py
+├── mock_agent.py
+├── analyze_sim.py
+├── compare_scenarios.py
+├── provider-cli / .cmd    # Bash + Windows CLI wrappers
+├── manufacturer-cli / .cmd
+├── retailer-cli / .cmd
+└── requirements.txt
+```
+
+## Troubleshooting
+
+- **`ModuleNotFoundError: No module named 'pydantic_settings'`** — the
+  `python` on your `PATH` is not the venv interpreter. Activate the venv
+  first, or invoke the apps via the venv's python directly:
+  `./.venv/bin/python -m src.cli serve --port 8001` on Linux,
+  `.\.venv\Scripts\python.exe -m src.cli serve --port 8001` on Windows.
+- **`sqlite3.OperationalError: database is locked`** — the apps default to
+  `uvicorn --reload`, which spawns two processes sharing the same SQLite
+  file. For long simulations, prefer running without reload (currently this
+  means accepting the contention or running each app with a single process).
+- **`Day N: 0 placed / 0 fulfilled ...`** — either the retailer agent isn't
+  acting (check `logs/day-NNN-retailer-*.log`) or the scenario's `base_demand`
+  is too low.
+- **Old SQLite files from a previous schema** — Week 8 added new tables
+  (`signal_state`, `metrics`). If you see `OperationalError: no such table`
+  errors, delete `*/data/*.sqlite` and restart the services to recreate the
+  schema from `Base.metadata.create_all`.
+
+## License & credits
+
+Coursework project for DGSI. Built with FastAPI, SQLAlchemy, matplotlib,
+and Claude Code.
