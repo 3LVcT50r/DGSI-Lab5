@@ -55,6 +55,7 @@
   "initial_inventory": {
     "kit_piezas": 60,
     "pcb": 60,
+    "pcb_ref": 0,
     "extrusor": 60,
     "sensor_autonivel": 40,
     "cables_conexion": 200,

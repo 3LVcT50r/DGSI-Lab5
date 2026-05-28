@@ -523,7 +523,7 @@ def main() -> None:
                 print(f"Failed to release order: {exc}")
         elif args.subcommand == "status":
             try:
-                url = args.api_url.rstrip("/") + "/production/orders"
+                url = args.api_url.rstrip("/") + "/sales-orders"
                 with httpx.Client(timeout=10.0) as client:
                     response = client.get(url)
                     response.raise_for_status()

@@ -25,7 +25,7 @@ class IntegrationTestRunner:
         self.workspace_root = self._find_workspace_root()
         self.factory_path = self.workspace_root / "factory-app"
         self.retailer_path = self.workspace_root / "retailer-app"
-        
+        self.provider_path = self.workspace_root / "provider-app" 
     def _find_workspace_root(self):
         """Find the workspace root directory."""
         current = Path.cwd()
@@ -56,6 +56,11 @@ class IntegrationTestRunner:
         """Run a factory CLI command."""
         cmd = ["python", "-m", "src.cli"] + list(args)
         return self._run_command(cmd, cwd=self.factory_path)
+    
+    def run_provider_command(self, *args):
+        """Run a provider CLI command."""
+        cmd = ["python", "-m", "src.cli"] + list(args)
+        return self._run_command(cmd, cwd=self.provider_path)
     
     def _run_command(self, cmd, cwd=None):
         """Execute a command and return output."""
@@ -102,91 +107,71 @@ class IntegrationTestRunner:
             # PHASE 1: Initial State
             self.print_section("PHASE 1: Initial State")
             
-            print("\n[RETAILER] Current day:")
-            print(self.run_retailer_command("day", "current"))
+            print("\n Current day:")
+            print(self.run_factory_command("day", "current"))
+            
             
             print("\n[RETAILER] Initial stock:")
             print(self.run_retailer_command("stock"))
             
-            print("\n[FACTORY] Current day:")
-            print(self.run_factory_command("day", "current"))
-            
+                       
             print("\n[FACTORY] Initial inventory:")
-            print(self.run_factory_command("inventory"))
+            print(self.run_factory_command("stock"))
             
-            # PHASE 2: Retailer Advances 5 Days
-            self.print_section("PHASE 2: Retailer Advances 5 Days")
             
-            for day_num in range(1, 6):
-                print(f"\n[DAY {day_num}] Advancing retailer day...")
-                self.run_retailer_command("day", "advance")
-                
-                print(f"[DAY {day_num}] Customer orders:")
-                print(self.run_retailer_command("customers", "orders"))
-                
-                print(f"[DAY {day_num}] Stock:")
-                print(self.run_retailer_command("stock"))
+            self.print_section("PHASE 2: Purchase Requests")
             
-            # PHASE 3: Retailer Creates Purchase Orders
-            self.print_section("PHASE 3: Retailer Creates Purchase Orders")
+            print(self.run_retailer_command("purchase", "create" , "1", "3"))
             
-            print("\n[RETAILER] Creating purchase order (product 1, qty 30)...")
-            print(self.run_retailer_command("purchase", "create", "1", "30"))
-            
-            print("\n[RETAILER] Purchase orders:")
+            print("\n[RETAILER] Purchase Requests:")
             print(self.run_retailer_command("purchase", "list"))
+            print("\n[FACTORY] Purchase Status:")
+            print(self.run_factory_command("production", "status"))
             
-            # PHASE 4: Factory Receives Order
-            self.print_section("PHASE 4: Factory Receives Retailer's Order")
+            self.print_section("PHASE 3: Advance a day")
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
             
-            print("\n[FACTORY] Incoming sales orders:")
-            print(self.run_factory_command("sales", "orders"))
-            
-            # PHASE 5: Factory Production Planning
-            self.print_section("PHASE 5: Factory Production Planning")
-            
-            print("\n[FACTORY] Capacity:")
-            print(self.run_factory_command("capacity"))
-            
-            print("\n[FACTORY] Inventory:")
-            print(self.run_factory_command("inventory"))
-            
-            # PHASE 6: Factory Releases Order
-            self.print_section("PHASE 6: Factory Releases Order to Production")
-            
-            print("\n[FACTORY] Releasing order ID 1...")
-            print(self.run_factory_command("production", "release", "1"))
-            
-            # PHASE 7: Factory Advances 7 Days
-            self.print_section("PHASE 7: Factory Advances 7 Days")
-            
-            for day_num in range(1, 8):
-                print(f"\n[FAC-DAY {day_num}] Advancing factory day...")
-                self.run_factory_command("day", "advance")
-                
-                print(f"[FAC-DAY {day_num}] Production status:")
-                print(self.run_factory_command("production", "status"))
-            
-            # PHASE 8: Final State
-            self.print_section("PHASE 8: Final State")
-            
-            print("\n[RETAILER] Final day:")
-            print(self.run_retailer_command("day", "current"))
-            
+            self.print_section("PHASE 4: Check stock moved")
             print("\n[RETAILER] Final stock:")
             print(self.run_retailer_command("stock"))
+            print("\n[FACTORY] Final stock:")
+            print(self.run_factory_command("stock"))
             
-            print("\n[RETAILER] Final purchase orders:")
-            print(self.run_retailer_command("purchase", "list"))
+            self.print_section("PHASE 5: Request parts")
             
-            print("\n[FACTORY] Final day:")
-            print(self.run_factory_command("day", "current"))
+            print(self.run_factory_command("stock"))
+            print(self.run_provider_command("stock"))
             
-            print("\n[FACTORY] Final sales orders:")
-            print(self.run_factory_command("sales", "orders"))
+            print(self.run_factory_command("purchase", "create", "--supplier \"ChipSupply Co\" --product 7 --qty 10"))
+            print(self.run_provider_command("orders", "list"))
             
-            self.print_section("Integration Test Complete")
-            print("✓ All phases executed successfully!\n")
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            
+            self.print_section("PHASE 6: See orders ready")
+            print(self.run_provider_command("orders", "list"))
+            print(self.run_factory_command("day", "advance"))
+            print(self.run_provider_command("day", "advance"))
+            print(self.run_retailer_command("day", "advance"))
+            
+            self.print_section("PHASE 7: Stock parts")
+            print(self.run_factory_command("stock"))
+            print(self.run_provider_command("stock"))
             
             return True
             
