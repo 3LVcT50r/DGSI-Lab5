@@ -1,8 +1,8 @@
 ---
 title: "Multi-agent supply chain simulation — Week 8 report"
 subtitle: "DGSI · Labs 5–8 three-week arc"
-author: "<your name>"
-date: "<YYYY-MM-DD>"
+author: "Victor Hernandez, Ana Poveda, Mariam Delgado, Adria Irigarai"
+date: "28/05/2026"
 geometry: margin=2.5cm
 ---
 
