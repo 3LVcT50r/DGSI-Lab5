@@ -185,7 +185,7 @@ def advance_day(session: Session) -> int:
 
     # Move confirmed orders to in progress
     orders_to_finish = session.query(Order).filter(
-        and_(Order.status == OrderStatus.DELIVERED, Order.expected_delivery_day <= current_day)
+        Order.status == OrderStatus.DELIVERED
     ).all()
 
     for order in orders_to_finish:
