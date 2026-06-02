@@ -114,11 +114,13 @@ def seed_database_from_config(
                 )
                 session.add(supplier)
 
-    # 5. Create Inventory records at 0 for all products
-    for prod in products_cache.values():
+    # 5. Create Inventory records. Initial quantities come from config so the
+    #    factory can produce on day 1 instead of starving for materials.
+    initial_inventory = config_data.get("initial_inventory", {})
+    for name, prod in products_cache.items():
         inv = Inventory(
             product_id=prod.id,
-            quantity=0,
+            quantity=float(initial_inventory.get(name, 0)),
             reserved=0,
         )
         session.add(inv)

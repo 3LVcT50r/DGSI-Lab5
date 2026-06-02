@@ -4,7 +4,7 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 
-API_URL = "http://localhost:8000/api/v1"
+API_URL = "http://localhost:8002/api/v1"
 PROVIDER_API_URL = "http://localhost:8001/api/v1"
 
 st.set_page_config(
@@ -126,7 +126,7 @@ products = fetch_data("products")
 if status is None or products is None:
     st.warning(
         "Cannot connect to backend. "
-        "Is FastAPI running on port 8000?"
+        "Is FastAPI running on port 8002?"
     )
     st.stop()
 
@@ -206,23 +206,21 @@ if suppliers:
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("### 📋 Pending Manufacturing Orders")
-    pending_orders = status.get(
-        "pending_orders", []
-    )
-    if pending_orders:
-        df_orders = pd.DataFrame(pending_orders)
+    st.markdown("### 📋 Sales Orders")
+    sales_orders = fetch_data("sales-orders")
+    if sales_orders:
+        df_orders = pd.DataFrame(sales_orders)
         df_orders["Product"] = (
             df_orders["product_id"].map(product_map)
         )
 
         selected_order_id = st.selectbox(
-            "Select Pending Order to Release Manually",
+            "Select Sales Order to Release",
             df_orders["id"].tolist(),
         )
         if st.button("Release Selected Order"):
             post_data(
-                f"orders/{selected_order_id}/release"
+                f"sales-orders/{selected_order_id}/release"
             )
             refresh()
 
@@ -234,7 +232,7 @@ with col1:
             use_container_width=True,
         )
     else:
-        st.info("No pending orders.")
+        st.info("No sales orders.")
 
     st.markdown("### 🛠 Open Purchase Orders")
     open_pos = fetch_data_provider("orders")

@@ -80,7 +80,7 @@ def create_purchase_order(provider: Dict[str, Any], product_identifier: Union[st
 
 def serve_app(port: int = 8000) -> None:
     """Serve the factory FastAPI app using Uvicorn."""
-    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("src.main:app", host="0.0.0.0", port=port, reload=False)
 
 
 def list_provider_orders(provider: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -178,6 +178,16 @@ def advance_day(api_url: str) -> None:
         print(f"Day advanced: {json.dumps(result, indent=2)}")
 
 
+def current_day(api_url: str) -> None:
+    """Get the current simulation day via the factory API."""
+    url = api_url.rstrip("/") + "/simulate/status"
+    with httpx.Client(timeout=10.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        result = response.json()
+        print(f"Current day: {result.get('current_day')}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Manufacturer CLI for factory-app"
@@ -209,7 +219,7 @@ def main() -> None:
     export_inventory_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
     export_events_parser = export_sub.add_parser("events", help="Export event history")
@@ -221,7 +231,7 @@ def main() -> None:
     export_events_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
@@ -237,7 +247,7 @@ def main() -> None:
     import_inventory_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
     import_events_parser = import_sub.add_parser("events", help="Import event history")
@@ -250,12 +260,18 @@ def main() -> None:
     import_events_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
     stock_parser = subparsers.add_parser("stock", help="Inventory stock commands")
-    stock_sub = stock_parser.add_subparsers(dest="subcommand", required=True)
+    stock_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
+    stock_sub = stock_parser.add_subparsers(dest="subcommand", required=False)
     stock_set_parser = stock_sub.add_parser("set", help="Set stock for a product")
     stock_set_parser.add_argument("--product", required=True, type=int, help="Product ID")
     stock_set_parser.add_argument("--qty", required=True, type=float, help="Quantity")
@@ -263,7 +279,7 @@ def main() -> None:
     stock_set_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
     stock_init_parser = stock_sub.add_parser("initialize", help="Initialize inventory from JSON file")
@@ -271,7 +287,24 @@ def main() -> None:
     stock_init_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
+
+    day_parser = subparsers.add_parser("day", help="Manage simulation day")
+    day_sub = day_parser.add_subparsers(dest="day_command", required=True)
+    day_advance_parser = day_sub.add_parser("advance", help="Advance a simulated day")
+    day_advance_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
+    day_current_parser = day_sub.add_parser("current", help="Show current simulated day")
+    day_current_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
@@ -280,13 +313,19 @@ def main() -> None:
 
     sales_parser = subparsers.add_parser("sales", help="Sales order commands")
     sales_sub = sales_parser.add_subparsers(dest="subcommand", required=True)
-    sales_sub.add_parser("orders", help="List sales orders")
-    sales_order_parser = sales_sub.add_parser("order", help="Get sales order details")
-    sales_order_parser.add_argument("id", type=int, help="Sales order ID")
-    sales_parser.add_argument(
+    sales_orders_parser = sales_sub.add_parser("orders", help="List sales orders")
+    sales_orders_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
+    sales_order_parser = sales_sub.add_parser("order", help="Get sales order details")
+    sales_order_parser.add_argument("id", type=int, help="Sales order ID")
+    sales_order_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
@@ -294,11 +333,17 @@ def main() -> None:
     production_sub = production_parser.add_subparsers(dest="subcommand", required=True)
     production_release_parser = production_sub.add_parser("release", help="Release a sales order to production")
     production_release_parser.add_argument("order_id", type=int, help="Sales order ID")
-    production_sub.add_parser("status", help="Show current production status")
-    production_parser.add_argument(
+    production_release_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
+    production_status_parser = production_sub.add_parser("status", help="Show current production status")
+    production_status_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
@@ -306,20 +351,26 @@ def main() -> None:
     capacity_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
     price_parser = subparsers.add_parser("price", help="Price commands")
     price_sub = price_parser.add_subparsers(dest="subcommand", required=True)
     price_list_parser = price_sub.add_parser("list", help="List wholesale prices")
+    price_list_parser.add_argument(
+        "--api-url",
+        type=str,
+        default="http://localhost:8002/api/v1",
+        help="Factory API base URL"
+    )
     price_set_parser = price_sub.add_parser("set", help="Set wholesale price")
     price_set_parser.add_argument("model", type=str, help="Product model name")
     price_set_parser.add_argument("price", type=float, help="Price")
-    price_parser.add_argument(
+    price_set_parser.add_argument(
         "--api-url",
         type=str,
-        default="http://localhost:8000/api/v1",
+        default="http://localhost:8002/api/v1",
         help="Factory API base URL"
     )
 
@@ -408,12 +459,34 @@ def main() -> None:
                 initialize_stock(args.api_url, args.input)
             except Exception as exc:
                 print(f"Failed to initialize inventory stock: {exc}")
+        else:
+            try:
+                url = args.api_url.rstrip("/") + "/inventory"
+                with httpx.Client(timeout=10.0) as client:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    items = response.json()
+                if not items:
+                    print("No inventory items.")
+                else:
+                    for item in items:
+                        product_id = item.get("product_id")
+                        qty = item.get("quantity", 0)
+                        reserved = item.get("reserved", 0)
+                        print(f"Product {product_id}: {qty} units (reserved {reserved})")
+            except httpx.HTTPError as exc:
+                print(f"Failed to fetch stock: {exc}")
     elif args.command == "day":
         if args.day_command == "advance":
             try:
                 advance_day(args.api_url)
             except httpx.HTTPError as exc:
                 print(f"Failed to advance day: {exc}")
+        elif args.day_command == "current":
+            try:
+                current_day(args.api_url)
+            except httpx.HTTPError as exc:
+                print(f"Failed to get current day: {exc}")
     elif args.command == "serve":
         serve_app(args.port)
     elif args.command == "sales":

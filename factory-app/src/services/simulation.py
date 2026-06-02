@@ -28,6 +28,9 @@ from src.models import (
     ProductType,
     Event,
     EventType,
+    SignalState,
+    Metric,
+    Inventory,
 )
 from src.schemas import (
     SimulationStatus,
@@ -55,10 +58,86 @@ def log_event(
     session.add(evt)
 
 
+def update_signal(
+    session: Session,
+    sim_day: int,
+    demand_modifier: float = 1.0,
+    supply_modifier: float = 1.0,
+    lead_time_modifier: float = 1.0,
+) -> SignalState:
+    """Persist today's market signal so it shows up in metrics and prompts."""
+    signal = session.query(SignalState).first()
+    if signal is None:
+        signal = SignalState()
+        session.add(signal)
+        session.flush()
+    signal.sim_day = sim_day
+    signal.demand_modifier = demand_modifier
+    signal.supply_modifier = supply_modifier
+    signal.lead_time_modifier = lead_time_modifier
+    session.commit()
+    return signal
+
+
+def snapshot_metrics(session: Session, sim_day: int) -> None:
+    """Persist one Metric row per product at the end of `advance_day`.
+
+    Day-level aggregates (`sales_orders_pending`, completed today, capacity
+    utilisation) are duplicated across rows of the same day so the analyzer
+    can pick any row without joining.
+    """
+    sales_pending = (
+        session.query(SalesOrder)
+        .filter(
+            SalesOrder.status.in_(
+                [
+                    SalesOrderStatus.RECEIVED,
+                    SalesOrderStatus.RELEASED,
+                    SalesOrderStatus.IN_PROGRESS,
+                    SalesOrderStatus.COMPLETED,
+                ]
+            )
+        )
+        .count()
+    )
+    sales_completed_today = (
+        session.query(SalesOrder)
+        .filter(SalesOrder.delivered_date == sim_day)
+        .count()
+    )
+
+    capacity = get_capacity_status(session)
+    cap_per_day = max(int(capacity.get("capacity_per_day", 0)), 1)
+    utilisation = round(
+        capacity.get("current_utilisation", 0) / cap_per_day * 100.0, 2
+    )
+
+    products = session.query(Product).all()
+    for product in products:
+        inv = (
+            session.query(Inventory)
+            .filter(Inventory.product_id == product.id)
+            .first()
+        )
+        session.add(
+            Metric(
+                sim_day=sim_day,
+                product_id=product.id,
+                product_name=product.name,
+                product_type=product.type.value if product.type else "raw",
+                stock_qty=inv.quantity if inv else 0.0,
+                wholesale_price=product.wholesale_price,
+                sales_orders_pending=sales_pending,
+                sales_orders_completed_today=sales_completed_today,
+                capacity_utilisation_pct=utilisation,
+            )
+        )
+
+
 def get_current_day(session: Session) -> int:
-    """Return the current simulation day."""
+    """Return the day currently in progress (stored last-completed + 1)."""
     state = session.query(SimulationState).first()
-    return state.current_day if state else 0
+    return (state.current_day + 1) if state else 1
 
 
 def generate_demand(
@@ -125,9 +204,10 @@ async def advance_day(session: Session) -> Dict[str, Any]:
             "Simulation state not initialized."
         )
 
-    # 1. Update day counter
-    state.current_day += 1
-    today = state.current_day
+    # 1. Resolve "today" = the day we're closing out. We bump state.current_day
+    #    at the END of this function so anything that runs in between (and
+    #    queries get_current_day) sees the correct in-progress day.
+    today = state.current_day + 1
 
     with open(settings.default_config_path, "r") as f:
         config = json.load(f)
@@ -181,7 +261,6 @@ async def advance_day(session: Session) -> Dict[str, Any]:
         mo.status = OrderStatus.COMPLETED
         mo.completed_date = today
         # Add the finished product into inventory
-        from src.services.inventory import receive_purchase_order
         receive_purchase_order(session, mo.product_id, mo.quantity)
         if mo.sales_order:
             mo.sales_order.status = SalesOrderStatus.COMPLETED
@@ -193,6 +272,15 @@ async def advance_day(session: Session) -> Dict[str, Any]:
             {"order_id": mo.id, "sales_order_id": mo.sales_order_id, "qty": mo.quantity},
         )
 
+    # Discard delivered orders
+    sales_to_discard = session.query(SalesOrder).filter(
+        SalesOrder.status.in_( [
+            SalesOrderStatus.DELIVERED,
+        ])
+    ).order_by(SalesOrder.created_date.asc()).with_for_update().all()
+    
+    for so in sales_to_discard:
+        session.delete(so)
     # 3.5 Fulfil sales orders from finished stock
     from src.models.inventory import Inventory
     sales_to_fulfil = session.query(SalesOrder).filter(
@@ -288,22 +376,16 @@ async def advance_day(session: Session) -> Dict[str, Any]:
                 },
             )
 
-    # 5. Generate demand for next simulation cycle
-    generate_demand(session, today, settings)
-
-    # 6. Advance provider day and check for deliveries
+    # 5. Poll provider for already-delivered orders and receive materials.
+    #    We do NOT advance the provider's day — the turn engine handles that.
     provider_service = get_provider_service(settings)
     try:
-        await provider_service.advance_day()
-        # Get all orders from provider that are delivered
-        provider_orders = await provider_service.get_orders(status="Delivered")
+        provider_orders = await provider_service.get_orders(status="delivered")
         for provider_order in provider_orders:
-            # Find local PO with this provider_order_id
             local_po = session.query(PurchaseOrder).filter(
                 PurchaseOrder.provider_order_id == provider_order["id"]
             ).first()
             if local_po and local_po.status == PurchaseOrderStatus.OPEN:
-                # Receive the materials
                 receive_purchase_order(session, local_po.product_id, local_po.quantity)
                 local_po.status = PurchaseOrderStatus.RECEIVED
                 log_event(
@@ -318,7 +400,10 @@ async def advance_day(session: Session) -> Dict[str, Any]:
                     },
                 )
     except Exception as exc:
-        logger.warning(f"Failed to advance provider or check deliveries: {exc}")
+        logger.warning(f"Failed to check provider deliveries: {exc}")
+
+    snapshot_metrics(session, today)
+    state.current_day = today  # commit the day bump AFTER snapshot.
 
     session.commit()
     return {"status": "advanced", "current_day": today}
@@ -467,10 +552,16 @@ async def create_purchase_order(
 ) -> PurchaseOrderRead:
     """Issue a purchase order for raw materials by calling the provider."""
     provider_service = get_provider_service(settings)
-    
-    # Place order with provider
+
+    # Resolve local product name; the provider has independent IDs.
+    product = session.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise ValueError(f"Unknown product_id {product_id}")
+
     try:
-        provider_order = await provider_service.place_order(product_id, quantity)
+        provider_order = await provider_service.place_order(
+            product_name=product.name, quantity=quantity,
+        )
     except Exception as exc:
         raise ValueError(f"Failed to place order with provider: {exc}")
 
